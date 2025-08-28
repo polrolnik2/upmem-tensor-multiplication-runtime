@@ -178,7 +178,7 @@ void pim_matrix_multiplication_frame_load_first_matrix(pim_matrix_multiplication
     DPU_FOREACH(frame->dpu_set, dpu, i) {
         if (!submatrices_data_populated[i % frame->work_group_size]) {
             submatrices[i % frame->work_group_size] = matrix_align(submatrices[i % frame->work_group_size]);
-            printf("Aligned submatrix %d for PIM frame\n%s", i % frame->work_group_size, matrix_sprint(submatrices[i % frame->work_group_size], "| %u |"));
+            printf("Aligned submatrix %d for PIM frame\n%s", i % frame->work_group_size, matrix_sprint(submatrices[i % frame->work_group_size], "| %02X |"));
             if (!submatrices[i % frame->work_group_size]) {
                 fprintf(stderr, "Failed to align submatrix for PIM frame\n");
                 goto cleanup;
@@ -297,12 +297,45 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.wram_input_tile_size = 4096; // Size of input tile in WRAM
     
     // Set tile dimensions for DPU kernel
-    input_args.matrix1_tile_rows = input_args.matrix1_rows;
-    input_args.matrix1_tile_cols = input_args.matrix1_cols;
-    input_args.matrix2_tile_rows = input_args.matrix2_rows;
-    input_args.matrix2_tile_cols = input_args.matrix2_cols;
-    input_args.result_tile_rows = input_args.result_rows;
-    input_args.result_tile_cols = input_args.result_cols;
+    if (input_args.matrix1_rows * input_args.matrix1_cols * input_args.matrix1_type_size < input_args.wram_input_tile_size) {
+        input_args.matrix1_tile_rows = input_args.matrix1_rows;
+        input_args.matrix1_tile_cols = input_args.matrix1_cols;
+    } else {
+        if (input_args.matrix1_cols * input_args.matrix1_type_size < input_args.wram_input_tile_size) {
+            input_args.matrix1_tile_rows = input_args.matrix1_rows * input_args.matrix1_type_size / input_args.wram_input_tile_size;
+            input_args.matrix1_tile_cols = input_args.matrix1_cols;
+        } else {
+            input_args.matrix1_tile_rows = 1;
+            input_args.matrix1_tile_cols = input_args.matrix1_cols * input_args.matrix1_type_size / input_args.wram_input_tile_size;
+        }
+    }
+    
+    // Set tile dimensions for DPU kernel
+    if (input_args.matrix2_rows * input_args.matrix2_cols * input_args.matrix2_type_size < input_args.wram_input_tile_size) {
+        input_args.matrix2_tile_rows = input_args.matrix2_rows;
+        input_args.matrix2_tile_cols = input_args.matrix2_cols;
+    } else {
+        if (input_args.matrix2_cols * input_args.matrix2_type_size < input_args.wram_input_tile_size) {
+            input_args.matrix2_tile_rows = input_args.matrix2_rows;
+            input_args.matrix2_tile_cols = input_args.matrix2_cols * input_args.matrix2_type_size / input_args.wram_input_tile_size;
+        } else {
+            input_args.matrix2_tile_rows = input_args.matrix2_rows * input_args.matrix2_type_size / input_args.wram_input_tile_size;
+            input_args.matrix2_tile_cols = 1;
+        }
+    }
+
+    if (input_args.result_rows * input_args.result_cols * input_args.result_type_size < 2 * input_args.wram_input_tile_size) {
+        input_args.result_tile_rows = input_args.result_rows;
+        input_args.result_tile_cols = input_args.result_cols;
+    } else {
+        if (input_args.result_cols * input_args.result_type_size < 2 * input_args.wram_input_tile_size) {
+            input_args.result_tile_rows = input_args.result_rows * input_args.result_type_size / 2 * input_args.wram_input_tile_size;
+            input_args.result_tile_cols = input_args.result_cols;
+        } else {
+            input_args.result_tile_rows = 1;
+            input_args.result_tile_cols = input_args.result_cols * input_args.result_type_size / 2 * input_args.wram_input_tile_size;
+        }
+    }
 
     DPU_FOREACH(frame->dpu_set, dpu) {
         DPU_ASSERT(dpu_prepare_xfer(dpu, &input_args));
