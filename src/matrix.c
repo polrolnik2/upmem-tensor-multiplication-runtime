@@ -190,8 +190,8 @@ char* matrix_sprint(const Matrix* mat, const char* format) {
     for (int r = 0; r < mat->rows; ++r) {
         for (int c = 0; c < mat->cols; ++c) {
             // Format based on element size
-            if (mat->element_size == sizeof(int8_t)) {
-                int8_t value;
+            if (mat->element_size == sizeof(uint8_t)) {
+                uint8_t value;
                 memcpy(&value, (char*)mat->data[r] + c * mat->element_size, mat->element_size);
                 pos += snprintf(buf + pos, bufsize - pos, format, value);
             } else if (mat->element_size == sizeof(int16_t)) {
@@ -232,8 +232,8 @@ void matrix_print(const Matrix* mat, const char* format) {
     for (int r = 0; r < mat->rows; ++r) {
         for (int c = 0; c < mat->cols; ++c) {
             // Print based on element size and format
-            if (mat->element_size == sizeof(int8_t)) {
-                int8_t value;
+            if (mat->element_size == sizeof(uint8_t)) {
+                uint8_t value;
                 memcpy(&value, (char*)mat->data[r] + c * mat->element_size, mat->element_size);
                 printf(format, value);
             } else if (mat->element_size == sizeof(int16_t)) {
