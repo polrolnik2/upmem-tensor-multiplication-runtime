@@ -142,14 +142,14 @@ int main() {
     }
     barrier_wait(&my_barrier);
 
-    uint16_t result_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.result_rows / MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
-    uint16_t result_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.result_cols / MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
-
     uint16_t matrix1_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows;
     uint16_t matrix1_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
 
     uint16_t matrix2_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
     uint16_t matrix2_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols;
+
+    uint16_t result_tiles_rowwise = matrix1_tiles_rowwise;
+    uint16_t result_tiles_colwise = matrix2_tiles_colwise;
 
     if (pid == 0) {
         printf("[DPU %d] Tile dimensions debug:\n", pid);

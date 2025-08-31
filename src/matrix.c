@@ -84,6 +84,103 @@ Matrix* matrix_create_from_column_major_array(int16_t rows, int16_t cols, void *
     return mat;
 }
 
+Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16_t num_col_tiles,
+                                                   int16_t tile_rows, int16_t tile_cols,
+                                                   void *data, uint32_t element_size) {
+    if (num_row_tiles <= 0 || num_col_tiles <= 0 || tile_rows <= 0 || tile_cols <= 0 || !data || element_size == 0) return NULL;
+    
+    Matrix*** tiles = NULL;
+    Matrix** row_matrices = NULL;
+    Matrix* result = NULL;
+    
+    // Create a 2D array of Matrix pointers to hold all tiles
+    tiles = (Matrix***)malloc(num_row_tiles * sizeof(Matrix**));
+    if (!tiles) goto cleanup;
+    
+    // Initialize all pointers to NULL for safe cleanup
+    for (int16_t i = 0; i < num_row_tiles; i++) {
+        tiles[i] = NULL;
+    }
+    
+    for (int16_t i = 0; i < num_row_tiles; i++) {
+        tiles[i] = (Matrix**)malloc(num_col_tiles * sizeof(Matrix*));
+        if (!tiles[i]) goto cleanup;
+        
+        // Initialize all tile pointers to NULL for safe cleanup
+        for (int16_t j = 0; j < num_col_tiles; j++) {
+            tiles[i][j] = NULL;
+        }
+    }
+    
+    // Create individual tile matrices from the 4D data
+    char* src_data = (char*)data;
+    size_t tile_size_bytes = tile_rows * tile_cols * element_size;
+    
+    for (int16_t tile_row = 0; tile_row < num_row_tiles; tile_row++) {
+        for (int16_t tile_col = 0; tile_col < num_col_tiles; tile_col++) {
+            // Calculate the offset for this tile in the source data
+            size_t tile_offset = (tile_row * num_col_tiles + tile_col) * tile_size_bytes;
+            void* tile_data = src_data + tile_offset;
+            
+            // Create a matrix from this tile's data
+            tiles[tile_row][tile_col] = matrix_create_from_row_major_array(tile_rows, tile_cols, tile_data, element_size);
+            if (!tiles[tile_row][tile_col]) goto cleanup;
+        }
+    }
+    
+    // Join tiles by columns first (for each row of tiles)
+    row_matrices = (Matrix**)malloc(num_row_tiles * sizeof(Matrix*));
+    if (!row_matrices) goto cleanup;
+    
+    for (int16_t row = 0; row < num_row_tiles; row++) {
+        row_matrices[row] = matrix_join_by_cols(tiles[row], num_col_tiles);
+        if (!row_matrices[row]) goto cleanup;
+    }
+    
+    // Join all row matrices to create the final result
+    result = matrix_join_by_rows(row_matrices, num_row_tiles);
+    if (!result) goto cleanup;
+    
+    // Clean up intermediate structures but keep the result
+    for (int16_t r = 0; r < num_row_tiles; r++) {
+        if (tiles[r]) {
+            for (int16_t c = 0; c < num_col_tiles; c++) {
+                if (tiles[r][c]) matrix_free(tiles[r][c]);
+            }
+            free(tiles[r]);
+        }
+        if (row_matrices[r]) matrix_free(row_matrices[r]);
+    }
+    free(tiles);
+    free(row_matrices);
+    
+    return result;
+
+cleanup:
+    if (tiles) {
+        for (int16_t r = 0; r < num_row_tiles; r++) {
+            if (tiles[r]) {
+                for (int16_t c = 0; c < num_col_tiles; c++) {
+                    if (tiles[r][c]) matrix_free(tiles[r][c]);
+                }
+                free(tiles[r]);
+            }
+        }
+        free(tiles);
+    }
+    
+    if (row_matrices) {
+        for (int16_t r = 0; r < num_row_tiles; r++) {
+            if (row_matrices[r]) matrix_free(row_matrices[r]);
+        }
+        free(row_matrices);
+    }
+    
+    if (result) matrix_free(result);
+    
+    return NULL;
+}
+
 void matrix_free(Matrix* mat) {
     if (mat) {
         if (mat->data) {

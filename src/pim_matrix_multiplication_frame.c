@@ -27,6 +27,18 @@ uint32_t calculate_pad_cols(int16_t cols, int16_t element_size) {
     return pad / element_size;
 }
 
+uint32_t get_matrix1_tile_size_bytes(const pim_matrix_multiplication_frame_t* frame) {
+    return frame->matrix1_tile_rows * frame->matrix1_tile_cols * frame->matrix1_type_size;
+}
+
+uint32_t get_matrix2_tile_size_bytes(const pim_matrix_multiplication_frame_t* frame) {
+    return frame->matrix2_tile_rows * frame->matrix2_tile_cols * frame->matrix2_type_size;
+}
+
+uint32_t get_result_tile_size_bytes(const pim_matrix_multiplication_frame_t* frame) {
+    return frame->result_tile_rows * frame->result_tile_cols * frame->result_type_size;
+}
+
 Matrix * matrix_align(const Matrix *mat) {
     if (!mat) return NULL;
     int16_t pad_rows = calculate_pad_rows(mat->rows, mat->element_size);
@@ -126,13 +138,52 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
 
     frame->result_valid = false;
 
+    frame->wram_input_tile_size = 2048; // Size of input tile in WRAM
+    
+    // Calculate aligned dimensions for tile size calculations
+    uint32_t matrix1_split_rows = (frame->result_rows + ((frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
+    uint32_t matrix1_aligned_rows = calculate_pad_rows(matrix1_split_rows, frame->matrix1_type_size) + matrix1_split_rows;
+    uint32_t matrix1_aligned_cols = calculate_pad_cols(frame->matrix1_cols, frame->matrix1_type_size) + frame->matrix1_cols;
+    uint32_t matrix2_aligned_rows = calculate_pad_rows(frame->matrix2_rows, frame->matrix2_type_size) + frame->matrix2_rows;
+    uint32_t matrix2_split_cols = (frame->matrix2_cols + ((frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
+    uint32_t matrix2_aligned_cols = calculate_pad_cols(matrix2_split_cols, frame->matrix2_type_size) + matrix2_split_cols;
+    
+    // Calculate tile dimensions for matrix1
+    if (matrix1_aligned_rows * matrix1_aligned_cols * frame->matrix1_type_size <= frame->wram_input_tile_size) {
+        frame->matrix1_tile_rows = matrix1_aligned_rows;
+        frame->matrix1_tile_cols = matrix1_aligned_cols;
+    } else {
+        if (matrix1_aligned_cols * frame->matrix1_type_size <= frame->wram_input_tile_size) {
+            frame->matrix1_tile_rows = matrix1_aligned_rows / ((matrix1_aligned_rows * matrix1_aligned_cols * frame->matrix1_type_size) / frame->wram_input_tile_size);
+            frame->matrix1_tile_cols = matrix1_aligned_cols;
+        } else {
+            frame->matrix1_tile_rows = 1;
+            frame->matrix1_tile_cols = matrix1_aligned_cols * frame->matrix1_type_size / frame->wram_input_tile_size;
+        }
+    }
+    
+    // Calculate tile dimensions for matrix2
+    if (matrix2_aligned_rows * matrix2_aligned_cols * frame->matrix2_type_size <= frame->wram_input_tile_size) {
+        frame->matrix2_tile_rows = matrix2_aligned_rows;
+        frame->matrix2_tile_cols = matrix2_aligned_cols;
+    } else {
+        if (matrix2_aligned_cols * frame->matrix2_type_size <= frame->wram_input_tile_size) {
+            frame->matrix2_tile_rows = matrix2_aligned_rows;
+            frame->matrix2_tile_cols = matrix2_aligned_cols / ((matrix2_aligned_rows * matrix2_aligned_cols * frame->matrix2_type_size) / frame->wram_input_tile_size);
+        } else {
+            frame->matrix2_tile_rows = matrix2_aligned_rows * frame->matrix2_type_size / frame->wram_input_tile_size;
+            frame->matrix2_tile_cols = 1;
+        }
+    }
+
+    frame->result_tile_rows = frame->matrix1_tile_rows;
+    frame->result_tile_cols = frame->matrix2_tile_cols;
+
     const char* dpu_binary = "/workspace/bin/matrix_multiply_dpu";
     DPU_ASSERT(dpu_load(frame->dpu_set, dpu_binary, NULL));
 
     return frame;
 }
-
-void destroy_pim_matrix_multiplication_frame(pim_matrix_multiplication_frame_t* frame);
 
 void pim_matrix_multiplication_frame_load_first_matrix(pim_matrix_multiplication_frame_t* frame, Matrix * matrix) {
     if (!frame || !matrix) return;
@@ -294,38 +345,15 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.matrix1_type_size = frame->matrix1_type_size;
     input_args.matrix2_type_size = frame->matrix2_type_size;
     input_args.result_type_size = frame->result_type_size;
-    input_args.wram_input_tile_size = 2048; // Size of input tile in WRAM
     
-    // Set tile dimensions for DPU kernel
-    if (input_args.matrix1_rows * input_args.matrix1_cols * input_args.matrix1_type_size <= input_args.wram_input_tile_size) {
-        input_args.matrix1_tile_rows = input_args.matrix1_rows;
-        input_args.matrix1_tile_cols = input_args.matrix1_cols;
-    } else {
-        if (input_args.matrix1_cols * input_args.matrix1_type_size <= input_args.wram_input_tile_size) {
-            input_args.matrix1_tile_rows = input_args.matrix1_rows / ((input_args.matrix1_rows * input_args.matrix1_cols * input_args.matrix1_type_size) / input_args.wram_input_tile_size);
-            input_args.matrix1_tile_cols = input_args.matrix1_cols;
-        } else {
-            input_args.matrix1_tile_rows = 1;
-            input_args.matrix1_tile_cols = input_args.matrix1_cols * input_args.matrix1_type_size / input_args.wram_input_tile_size;
-        }
-    }
-    
-    // Set tile dimensions for DPU kernel
-    if (input_args.matrix2_rows * input_args.matrix2_cols * input_args.matrix2_type_size <= input_args.wram_input_tile_size) {
-        input_args.matrix2_tile_rows = input_args.matrix2_rows;
-        input_args.matrix2_tile_cols = input_args.matrix2_cols;
-    } else {
-        if (input_args.matrix2_cols * input_args.matrix2_type_size <= input_args.wram_input_tile_size) {
-            input_args.matrix2_tile_rows = input_args.matrix2_rows;
-            input_args.matrix2_tile_cols = input_args.matrix2_cols / ((input_args.matrix2_rows * input_args.matrix2_cols * input_args.matrix2_type_size) / input_args.wram_input_tile_size);
-        } else {
-            input_args.matrix2_tile_rows = input_args.matrix2_rows * input_args.matrix2_type_size / input_args.wram_input_tile_size;
-            input_args.matrix2_tile_cols = 1;
-        }
-    }
-
-    input_args.result_tile_rows = input_args.matrix1_tile_rows;
-    input_args.result_tile_cols = input_args.matrix2_tile_cols;
+    // Use pre-calculated tile dimensions from the frame
+    input_args.wram_input_tile_size = frame->wram_input_tile_size;
+    input_args.matrix1_tile_rows = frame->matrix1_tile_rows;
+    input_args.matrix1_tile_cols = frame->matrix1_tile_cols;
+    input_args.matrix2_tile_rows = frame->matrix2_tile_rows;
+    input_args.matrix2_tile_cols = frame->matrix2_tile_cols;
+    input_args.result_tile_rows = frame->result_tile_rows;
+    input_args.result_tile_cols = frame->result_tile_cols;
 
     printf("DPU Kernel Arguments:\n");
     printf("Matrix1: start_offset=%u, rows=%u, cols=%u, type_size=%u, tile_rows=%u, tile_cols=%u\n",
@@ -455,7 +483,14 @@ Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_fr
         }
         
         for (uint32_t j = 0; j < result_submatrices_by_cols; j++) {
-            submatrices[i][j] = matrix_create_from_row_major_array(result_rows_dpu_transfer_aligned, result_cols_dpu_transfer_aligned, submatrices_data[i][j], frame->result_type_size);
+            // Calculate the number of tiles in this submatrix
+            uint32_t num_row_tiles = result_rows_dpu_transfer_aligned / frame->result_tile_rows;
+            uint32_t num_col_tiles = result_cols_dpu_transfer_aligned / frame->result_tile_cols;
+            
+            submatrices[i][j] = matrix_create_from_4d_row_major_tiled_array(
+                num_row_tiles, num_col_tiles,
+                frame->result_tile_rows, frame->result_tile_cols,
+                submatrices_data[i][j], frame->result_type_size);
             if (!submatrices[i][j]) {
                 fprintf(stderr, "Failed to create submatrix from row major array\n");
                 goto cleanup;

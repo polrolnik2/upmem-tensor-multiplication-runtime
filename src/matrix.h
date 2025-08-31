@@ -56,6 +56,20 @@ Matrix* matrix_create_from_row_major_array(int16_t rows, int16_t cols, void *dat
 Matrix* matrix_create_from_column_major_array(int16_t rows, int16_t cols, void *data, uint32_t element_size);
 
 /**
+ * @brief Create a new matrix from a 4D tiled array in row-major order.
+ * @param num_row_tiles Number of tile rows.
+ * @param num_col_tiles Number of tile columns.
+ * @param tile_rows Number of rows per tile.
+ * @param tile_cols Number of columns per tile.
+ * @param data 4D tiled array data in row-major order.
+ * @param element_size Size of each element in bytes.
+ * @return Pointer to new Matrix, or NULL on failure.
+ */
+Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16_t num_col_tiles,
+                                                   int16_t tile_rows, int16_t tile_cols,
+                                                   void *data, uint32_t element_size);
+
+/**
  * @brief Free the memory used by a Matrix.
  * @param mat Pointer to Matrix to free.
  */

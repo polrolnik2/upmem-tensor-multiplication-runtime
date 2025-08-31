@@ -20,6 +20,16 @@ typedef struct {
     uint32_t matrix2_start_offset;    ///< MRAM offset for second matrix
     uint32_t result_start_offset;     ///< MRAM offset for result matrix
     uint32_t mem_frame_end;           ///< MRAM offset for end of memory frame
+    
+    // Tile dimensions for DPU kernel
+    uint32_t matrix1_tile_rows;       ///< Number of rows in matrix1 tiles
+    uint32_t matrix1_tile_cols;       ///< Number of columns in matrix1 tiles
+    uint32_t matrix2_tile_rows;       ///< Number of rows in matrix2 tiles
+    uint32_t matrix2_tile_cols;       ///< Number of columns in matrix2 tiles
+    uint32_t result_tile_rows;        ///< Number of rows in result tiles
+    uint32_t result_tile_cols;        ///< Number of columns in result tiles
+    uint32_t wram_input_tile_size;    ///< Size of input tile in WRAM
+    
     bool result_valid;              ///< Flag indicating if result is valid
     struct dpu_set_t dpu_set; ///< DPU set for execution
 } pim_matrix_multiplication_frame_t;
@@ -46,8 +56,6 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
                                                                         uint32_t matrix2_rows, uint32_t matrix2_cols,
                                                                         uint32_t result_rows, uint32_t result_cols,
                                                                         uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size);
-
-void destroy_pim_matrix_multiplication_frame(pim_matrix_multiplication_frame_t* frame);
 
 /**
  * @brief Load the first matrix (Left side of the multiplication) into the frame.
