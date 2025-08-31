@@ -297,11 +297,11 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.wram_input_tile_size = 4096; // Size of input tile in WRAM
     
     // Set tile dimensions for DPU kernel
-    if (input_args.matrix1_rows * input_args.matrix1_cols * input_args.matrix1_type_size < input_args.wram_input_tile_size) {
+    if (input_args.matrix1_rows * input_args.matrix1_cols * input_args.matrix1_type_size <= input_args.wram_input_tile_size) {
         input_args.matrix1_tile_rows = input_args.matrix1_rows;
         input_args.matrix1_tile_cols = input_args.matrix1_cols;
     } else {
-        if (input_args.matrix1_cols * input_args.matrix1_type_size < input_args.wram_input_tile_size) {
+        if (input_args.matrix1_cols * input_args.matrix1_type_size <= input_args.wram_input_tile_size) {
             input_args.matrix1_tile_rows = input_args.matrix1_rows * input_args.matrix1_type_size / input_args.wram_input_tile_size;
             input_args.matrix1_tile_cols = input_args.matrix1_cols;
         } else {
@@ -311,11 +311,11 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     }
     
     // Set tile dimensions for DPU kernel
-    if (input_args.matrix2_rows * input_args.matrix2_cols * input_args.matrix2_type_size < input_args.wram_input_tile_size) {
+    if (input_args.matrix2_rows * input_args.matrix2_cols * input_args.matrix2_type_size <= input_args.wram_input_tile_size) {
         input_args.matrix2_tile_rows = input_args.matrix2_rows;
         input_args.matrix2_tile_cols = input_args.matrix2_cols;
     } else {
-        if (input_args.matrix2_cols * input_args.matrix2_type_size < input_args.wram_input_tile_size) {
+        if (input_args.matrix2_cols * input_args.matrix2_type_size <= input_args.wram_input_tile_size) {
             input_args.matrix2_tile_rows = input_args.matrix2_rows;
             input_args.matrix2_tile_cols = input_args.matrix2_cols * input_args.matrix2_type_size / input_args.wram_input_tile_size;
         } else {
@@ -324,11 +324,11 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
         }
     }
 
-    if (input_args.result_rows * input_args.result_cols * input_args.result_type_size < 2 * input_args.wram_input_tile_size) {
+    if (input_args.result_rows * input_args.result_cols * input_args.result_type_size <= 2 * input_args.wram_input_tile_size) {
         input_args.result_tile_rows = input_args.result_rows;
         input_args.result_tile_cols = input_args.result_cols;
     } else {
-        if (input_args.result_cols * input_args.result_type_size < 2 * input_args.wram_input_tile_size) {
+        if (input_args.result_cols * input_args.result_type_size <= 2 * input_args.wram_input_tile_size) {
             input_args.result_tile_rows = input_args.result_rows * input_args.result_type_size / 2 * input_args.wram_input_tile_size;
             input_args.result_tile_cols = input_args.result_cols;
         } else {
@@ -336,6 +336,17 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
             input_args.result_tile_cols = input_args.result_cols * input_args.result_type_size / 2 * input_args.wram_input_tile_size;
         }
     }
+
+    printf("DPU Kernel Arguments:\n");
+    printf("Matrix1: start_offset=%u, rows=%u, cols=%u, type_size=%u, tile_rows=%u, tile_cols=%u\n",
+           input_args.matrix1_start_offset, input_args.matrix1_rows, input_args.matrix1_cols,
+           input_args.matrix1_type_size, input_args.matrix1_tile_rows, input_args.matrix1_tile_cols);
+    printf("Matrix2: start_offset=%u, rows=%u, cols=%u, type_size=%u, tile_rows=%u, tile_cols=%u\n",
+           input_args.matrix2_start_offset, input_args.matrix2_rows, input_args.matrix2_cols,
+           input_args.matrix2_type_size, input_args.matrix2_tile_rows, input_args.matrix2_tile_cols);
+    printf("Result: start_offset=%u, rows=%u, cols=%u, type_size=%u, tile_rows=%u, tile_cols=%u\n",
+           input_args.result_start_offset, input_args.result_rows, input_args.result_cols,
+           input_args.result_type_size, input_args.result_tile_rows, input_args.result_tile_cols);
 
     DPU_FOREACH(frame->dpu_set, dpu) {
         DPU_ASSERT(dpu_prepare_xfer(dpu, &input_args));
