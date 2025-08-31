@@ -335,6 +335,52 @@ int test_pim_square_prime_number_of_dpus() {
     return 0;
 }
 
+int test_pim_square_multi_tile_identity() {
+    printf("Running test_pim_square_multi_tile_identity...\n");
+    // Create two sample matrices 128x128
+    uint16_t rows = 128, cols = 128;
+    uint8_t data1[128*128], data2[128*128];
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            data1[i*cols + j] = i == j ? 1 : 0; // Sample data for matrix 1
+            data2[i*cols + j] = 1; // Sample data for matrix 2
+        }
+    }
+    Matrix* matrix1 = matrix_create_from_row_major_array(rows, cols, (void*)data1, sizeof(uint8_t));
+    Matrix* matrix2 = matrix_create_from_row_major_array(rows, cols, (void*)data2, sizeof(uint8_t));
+    ASSERT_TRUE(matrix1 != NULL, "Matrix 1 creation failed");
+    ASSERT_TRUE(matrix2 != NULL, "Matrix 2 creation failed");
+    Matrix* result = dpu_multiply_matrices(matrix1, matrix2, 4);
+    ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
+    Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
+    ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
+    printf(": %dx%d, Result dimensions: %dx%d\n",
+           expected_result->rows, expected_result->cols, result->rows, result->cols);
+    printf("Expected matrix:\n");
+    for (int i = 0; i < expected_result->rows; i++) {
+        for (int j = 0; j < expected_result->cols; j++) {
+            int16_t val;
+            matrix_get(expected_result, i, j, &val);
+            printf("| %d ", val);
+        }
+        printf("|\n");
+    }
+    printf("Result matrix:\n");
+    for (int i = 0; i < result->rows; i++) {
+        for (int j = 0; j < result->cols; j++) {
+            int16_t val;
+            matrix_get(result, i, j, &val);
+            printf("| %d ", val);
+        }
+        printf("|\n");
+    }
+    ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
+    ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
+    matrix_free(matrix1);
+    matrix_free(matrix2);
+    return 0;
+}
+
 int test_pim_square_multi_tile() {
     printf("Running test_pim_square_multi_tile...\n");
     // Create two sample matrices 128x128
@@ -391,6 +437,7 @@ int main() {
     fails += test_pim_rectangular_matrix_multiplication();
     fails += test_pim_square_prime_number_of_dpus();
     fails += test_pim_square_multi_tile();
+    fails += test_pim_square_multi_tile_identity();
     if (fails == 0) {
         printf("[PASS] All PIM matrix tests passed!\n");
         return 0;
