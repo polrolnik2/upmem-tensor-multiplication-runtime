@@ -117,6 +117,16 @@ int main() {
     
     barrier_wait(&my_barrier);
 
+    if (pid == 0) {
+        if (MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows == 0 || MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols == 0 ||
+            MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows == 0 || MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols == 0 ||
+            MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows == 0 || MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols == 0) {
+            printf("[DPU %d] ERROR: Division by zero detected in tile size or matrix dimension arguments\n", pid);
+            return -3;
+        }
+    }
+    barrier_wait(&my_barrier);
+
     uint16_t result_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.result_rows / MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
     uint16_t result_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.result_cols / MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
 
