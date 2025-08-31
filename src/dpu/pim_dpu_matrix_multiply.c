@@ -269,25 +269,31 @@ int main() {
                 // // Sync after buffer swap
                 barrier_wait(&my_barrier);
             }
-            
-            // // Process the last loaded tiles (tasklet 0 doesn't compute)
-            if (pid != 0) {
-                compute_tile_tasklet(pid, NR_TASKLETS, 
-                                   MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, 
-                                   MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, 
-                                   MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
-                                   compute_buffer);
-            }
-            
-            barrier_wait(&my_barrier);
-            
-            // // Mark final result as ready for writeback
-            if (pid == 0) {
-                result_wram_valid[compute_buffer] = true;
-                result_writeback_row_tile[compute_buffer] = i;
-                result_writeback_col_tile[compute_buffer] = j;
-            }
         }
+    }
+            
+    // Clear result buffer for new result tile
+    if (pid == 0) {
+        size_t result_elements = MATRIX_MULTIPLY_ARGUMENTS.wram_input_tile_size / sizeof(uint16_t);
+        for (size_t idx = 0; idx < result_elements; idx++) {
+            result_wram[compute_buffer][idx] = 0;
+        }
+    }
+    barrier_wait(&my_barrier);
+
+    if (pid != 0) {
+        compute_tile_tasklet(pid, NR_TASKLETS, 
+                            MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, 
+                            MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, 
+                            MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
+                            compute_buffer);
+    }
+    
+    barrier_wait(&my_barrier);
+    
+    // // Mark final result as ready for writeback
+    if (pid == 0) {
+        result_wram_valid[compute_buffer] = true;
     }
 
     barrier_wait(&my_barrier);
