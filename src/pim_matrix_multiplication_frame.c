@@ -131,14 +131,14 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
     curr_offset += matrix2_size_aligned / frame->num_work_groups;
     frame->result_start_offset = curr_offset;
 
-    uint32_t result_rows_transfer_aligned = matrix1_rows_aligned + calculate_pad_rows(matrix1_rows_aligned, frame->result_type_size);
-    uint32_t result_cols_transfer_aligned = matrix2_cols_aligned + calculate_pad_cols(matrix2_cols_aligned, frame->result_type_size);
+    uint32_t result_rows_transfer_aligned = matrix1_rows_transfer_aligned;
+    uint32_t result_cols_transfer_aligned = matrix2_cols_transfer_aligned;
     curr_offset += result_rows_transfer_aligned * result_cols_transfer_aligned * frame->result_type_size / frame->num_dpus;
     frame->mem_frame_end = curr_offset;
 
     frame->result_valid = false;
 
-    frame->wram_input_tile_size = 2048; // Size of input tile in WRAM
+    frame->wram_input_tile_size = 4096; // Size of input tile in WRAM
     
     // Calculate aligned dimensions for tile size calculations
     uint32_t matrix1_split_rows = (frame->result_rows + ((frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
@@ -338,10 +338,8 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.matrix2_rows = calculate_pad_rows(frame->matrix2_rows, frame->matrix2_type_size) + frame->matrix2_rows;
     uint32_t matrix2_split_cols = (frame->matrix2_cols + ((frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
     input_args.matrix2_cols = calculate_pad_cols(matrix2_split_cols, frame->matrix2_type_size) + matrix2_split_cols;
-    uint32_t result_rows_frame_aligned = ((frame->result_rows + (frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
-    uint32_t result_cols_frame_aligned = ((frame->result_cols + (frame->num_work_groups - (frame->result_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
-    input_args.result_rows = result_rows_frame_aligned + calculate_pad_rows(result_rows_frame_aligned, frame->result_type_size);
-    input_args.result_cols = result_cols_frame_aligned + calculate_pad_cols(result_cols_frame_aligned, frame->result_type_size);
+    input_args.result_rows = input_args.matrix1_rows;
+    input_args.result_cols = input_args.matrix2_cols;
     input_args.matrix1_type_size = frame->matrix1_type_size;
     input_args.matrix2_type_size = frame->matrix2_type_size;
     input_args.result_type_size = frame->result_type_size;
@@ -397,16 +395,13 @@ Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_fr
     Matrix **row_submatrices = NULL;
     Matrix *result = NULL;
     
-    uint32_t result_rows_frame_aligned = ((frame->result_rows + (frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
-    uint32_t result_cols_frame_aligned = ((frame->result_cols + (frame->num_work_groups - (frame->result_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
-    uint32_t result_rows_dpu_transfer_aligned = result_rows_frame_aligned + calculate_pad_rows(result_rows_frame_aligned, frame->result_type_size);
-    uint32_t result_cols_dpu_transfer_aligned = result_cols_frame_aligned + calculate_pad_cols(result_cols_frame_aligned, frame->result_type_size);
+    uint32_t result_rows_frame_aligned = (frame->result_rows + ((frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
+    uint32_t result_cols_frame_aligned = (frame->matrix2_cols + ((frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
+    uint32_t result_rows_dpu_transfer_aligned = calculate_pad_rows(result_rows_frame_aligned, frame->matrix1_type_size) + result_rows_frame_aligned;
+    uint32_t result_cols_dpu_transfer_aligned = calculate_pad_cols(result_cols_frame_aligned, frame->matrix2_type_size) + result_cols_frame_aligned;
     uint32_t result_size_aligned = result_rows_dpu_transfer_aligned * result_cols_dpu_transfer_aligned * frame->matrix2_type_size;
     uint32_t result_submatrices_by_rows = frame->work_group_size;
     uint32_t result_submatrices_by_cols = frame->num_work_groups;
-    
-    printf("Result matrix size: %u rows, %u cols, %u type size, total size: %u bytes\n",
-           result_rows_frame_aligned, result_cols_frame_aligned, frame->result_type_size, result_size_aligned);
     
     submatrices_data = (void***)malloc(result_submatrices_by_rows * sizeof(void**));
     if (!submatrices_data) {
