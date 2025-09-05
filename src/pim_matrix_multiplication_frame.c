@@ -142,19 +142,17 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
     
     // Calculate aligned dimensions for tile size calculations
     uint32_t matrix1_split_rows = (frame->result_rows + ((frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
-    uint32_t matrix1_aligned_rows = calculate_pad_rows(matrix1_split_rows, frame->matrix1_type_size) + matrix1_split_rows;
     uint32_t matrix1_aligned_cols = calculate_pad_cols(frame->matrix1_cols, frame->matrix1_type_size) + frame->matrix1_cols;
     uint32_t matrix2_aligned_rows = calculate_pad_rows(frame->matrix2_rows, frame->matrix2_type_size) + frame->matrix2_rows;
     uint32_t matrix2_split_cols = (frame->matrix2_cols + ((frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
-    uint32_t matrix2_aligned_cols = calculate_pad_cols(matrix2_split_cols, frame->matrix2_type_size) + matrix2_split_cols;
     
     // Calculate tile dimensions for matrix1
-    if (matrix1_aligned_rows * matrix1_aligned_cols * frame->matrix1_type_size <= frame->wram_input_tile_size) {
-        frame->matrix1_tile_rows = matrix1_aligned_rows;
+    if (matrix1_split_rows * matrix1_aligned_cols * frame->matrix1_type_size <= frame->wram_input_tile_size) {
+        frame->matrix1_tile_rows = matrix1_split_rows;
         frame->matrix1_tile_cols = matrix1_aligned_cols;
     } else {
         if (matrix1_aligned_cols * frame->matrix1_type_size <= frame->wram_input_tile_size) {
-            frame->matrix1_tile_rows = matrix1_aligned_rows / ((matrix1_aligned_rows * matrix1_aligned_cols * frame->matrix1_type_size) / frame->wram_input_tile_size);
+            frame->matrix1_tile_rows = matrix1_split_rows / ((matrix1_split_rows * matrix1_aligned_cols * frame->matrix1_type_size) / frame->wram_input_tile_size);
             frame->matrix1_tile_cols = matrix1_aligned_cols;
         } else {
             frame->matrix1_tile_rows = 1;
@@ -163,13 +161,13 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
     }
     
     // Calculate tile dimensions for matrix2
-    if (matrix2_aligned_rows * matrix2_aligned_cols * frame->matrix2_type_size <= frame->wram_input_tile_size) {
+    if (matrix2_aligned_rows * matrix2_split_cols * frame->matrix2_type_size <= frame->wram_input_tile_size) {
         frame->matrix2_tile_rows = matrix2_aligned_rows;
-        frame->matrix2_tile_cols = matrix2_aligned_cols;
+        frame->matrix2_tile_cols = matrix2_split_cols;
     } else {
-        if (matrix2_aligned_cols * frame->matrix2_type_size <= frame->wram_input_tile_size) {
+        if (matrix2_split_cols * frame->matrix2_type_size <= frame->wram_input_tile_size) {
             frame->matrix2_tile_rows = matrix2_aligned_rows;
-            frame->matrix2_tile_cols = matrix2_aligned_cols / ((matrix2_aligned_rows * matrix2_aligned_cols * frame->matrix2_type_size) / frame->wram_input_tile_size);
+            frame->matrix2_tile_cols = matrix2_split_cols / ((matrix2_aligned_rows * matrix2_split_cols * frame->matrix2_type_size) / frame->wram_input_tile_size);
         } else {
             frame->matrix2_tile_rows = matrix2_aligned_rows * frame->matrix2_type_size / frame->wram_input_tile_size;
             frame->matrix2_tile_cols = 1;
@@ -333,11 +331,11 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.matrix2_start_offset = frame->matrix2_start_offset;
     input_args.result_start_offset = frame->result_start_offset;
     uint32_t matrix1_split_rows = (frame->result_rows + ((frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
-    input_args.matrix1_rows = calculate_pad_rows(matrix1_split_rows, frame->matrix1_type_size) + matrix1_split_rows;
+    input_args.matrix1_rows = matrix1_split_rows;
     input_args.matrix1_cols = calculate_pad_cols(frame->matrix1_cols, frame->matrix1_type_size) + frame->matrix1_cols;
     input_args.matrix2_rows = calculate_pad_rows(frame->matrix2_rows, frame->matrix2_type_size) + frame->matrix2_rows;
     uint32_t matrix2_split_cols = (frame->matrix2_cols + ((frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
-    input_args.matrix2_cols = calculate_pad_cols(matrix2_split_cols, frame->matrix2_type_size) + matrix2_split_cols;
+    input_args.matrix2_cols = matrix2_split_cols;
     input_args.result_rows = input_args.matrix1_rows;
     input_args.result_cols = input_args.matrix2_cols;
     input_args.matrix1_type_size = frame->matrix1_type_size;
