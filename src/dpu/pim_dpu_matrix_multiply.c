@@ -188,13 +188,9 @@ int main() {
                 for (size_t idx = 0; idx < result_elements; idx++) {
                     result_wram[0][idx] = 0;
                 }
-                first_iteration = true; // Reset for next result tile
-                printf("[DPU %d] Result tile data: ", pid);
-                for (int b = 0; b < 16; b++) {
-                    printf("%02X ", result_wram[0][b]);
-                }
-                printf("\n");
             }
+            first_iteration = true; // Reset for next result tile
+
             barrier_wait(&my_barrier);
             
             // Accumulate across all K iterations for this result tile
@@ -211,12 +207,6 @@ int main() {
                         (i * matrix1_tiles_colwise + k) * matrix1_tile_size_bytes);
                     load_A_tile_from_mram(mram_addr_A, matrix1_wram[input_load_buffer], 
                                          matrix1_tile_size_bytes);
-                    printf("[DPU %d] Loaded A tile for [%d,%d] from MRAM addr:%p to input buffer %d\n", 
-                           pid, i, k, mram_addr_A, input_load_buffer);
-                    printf("[DPU %d] A tile data (first 8 bytes): ", pid);
-                    for (int b = 0; b < matrix1_tile_size_bytes; b++) {
-                        printf("%02X ", matrix1_wram[input_load_buffer][b]);
-                    }
                     printf("\n");
                     __mram_ptr void *mram_addr_B = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER + 
                         (k * matrix2_tiles_colwise + j) * matrix2_tile_size_bytes);
@@ -224,11 +214,6 @@ int main() {
                            pid, k, j, mram_addr_B, input_load_buffer);
                     load_B_tile_from_mram(mram_addr_B, matrix2_wram[input_load_buffer], 
                                          matrix2_tile_size_bytes);
-                    printf("Tile B data: ");
-                    for (int b = 0; b < matrix2_tile_size_bytes; b++) {
-                        printf("%02X ", matrix2_wram[input_load_buffer][b]);
-                    }
-                    printf("\n");
                 }
                 
                 // All threads except tasklet 0: Compute on input_compute_buffer, accumulate into result_buffer
@@ -239,14 +224,6 @@ int main() {
                                        MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
                                        input_compute_buffer, 0);
                 }
-
-                if(pid == 0 && !first_iteration) {
-                    printf("[DPU %d] Result tile data: ", pid);
-                    for (int b = 0; b < 16; b++) {
-                        printf("%02X ", result_wram[0][b]);
-                    }
-                    printf("\n");
-                }
                 
                 // Synchronize before input buffer swap
                 barrier_wait(&my_barrier);
@@ -255,7 +232,6 @@ int main() {
                 int temp = input_compute_buffer;
                 input_compute_buffer = input_load_buffer;
                 input_load_buffer = temp;
-
                 first_iteration = false;
 
                 // Sync after input buffer swap
@@ -269,14 +245,6 @@ int main() {
                                    MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, 
                                    MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
                                    input_compute_buffer, 0);
-            }
-
-            if(pid == 0) {
-                printf("[DPU %d] Result tile data: ", pid);
-                for (int b = 0; b < 16; b++) {
-                    printf("%02X ", result_wram[0][b]);
-                }
-                printf("\n");
             }
 
             barrier_wait(&my_barrier);
