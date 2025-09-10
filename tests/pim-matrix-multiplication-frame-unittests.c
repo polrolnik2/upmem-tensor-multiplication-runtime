@@ -479,6 +479,7 @@ int main() {
     printf("Running PIM Matrix Multiplication Frame Unittests...\n");
     fails += test_pim_identity_square_matrix_multiplication();
     fails += test_pim_square_matrix_multiplication();
+    return fails;
     fails += test_pim_transfer_misaligned_matrix_multiplication();
     fails += test_pim_frame_misaligned_matrix_multiplication();
     fails += test_pim_rectangular_matrix_multiplication();

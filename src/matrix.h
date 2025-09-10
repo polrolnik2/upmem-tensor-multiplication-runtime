@@ -106,6 +106,15 @@ void* matrix_get_data_row_major(const Matrix* mat);
 void* matrix_get_data_column_major(const Matrix* mat);
 
 /**
+ * @brief Get matrix data as a 4D tiled array in row-major order.
+ * @param mat Pointer to Matrix.
+ * @param tile_rows Number of rows per tile.
+ * @param tile_cols Number of columns per tile.
+ * @return Pointer to new 4D tiled row-major array (caller must free), or NULL on failure.
+ */
+void* matrix_get_data_4d_row_major_tiled(const Matrix* mat, int16_t tile_rows, int16_t tile_cols);
+
+/**
  * @brief Create a deep copy of a matrix.
  * @param mat Pointer to Matrix.
  * @return Pointer to new Matrix (caller must free), or NULL on failure.

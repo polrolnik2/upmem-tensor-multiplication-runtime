@@ -240,6 +240,54 @@ void* matrix_get_data_column_major(const Matrix* mat) {
     return data;
 }
 
+void* matrix_get_data_4d_row_major_tiled(const Matrix* mat, int16_t tile_rows, int16_t tile_cols) {
+    if (!mat || tile_rows <= 0 || tile_cols <= 0) return NULL;
+    
+    // Calculate number of tiles needed
+    int16_t num_row_tiles = (mat->rows + tile_rows - 1) / tile_rows;  // Ceiling division
+    int16_t num_col_tiles = (mat->cols + tile_cols - 1) / tile_cols;  // Ceiling division
+    
+    // Allocate memory for the 4D tiled data
+    size_t total_tiles = num_row_tiles * num_col_tiles;
+    size_t tile_size_bytes = tile_rows * tile_cols * mat->element_size;
+    void* data = malloc(total_tiles * tile_size_bytes);
+    if (!data) return NULL;
+    
+    char* dest_data = (char*)data;
+    
+    // Fill tiles in row-major order
+    for (int16_t tile_row = 0; tile_row < num_row_tiles; tile_row++) {
+        for (int16_t tile_col = 0; tile_col < num_col_tiles; tile_col++) {
+            // Calculate the offset for this tile in the destination data
+            size_t tile_offset = (tile_row * num_col_tiles + tile_col) * tile_size_bytes;
+            char* tile_dest = dest_data + tile_offset;
+            
+            // Fill this tile with data from the matrix
+            for (int16_t r = 0; r < tile_rows; r++) {
+                for (int16_t c = 0; c < tile_cols; c++) {
+                    // Calculate the actual matrix position
+                    int16_t mat_row = tile_row * tile_rows + r;
+                    int16_t mat_col = tile_col * tile_cols + c;
+                    
+                    // Calculate position in the tile data (row-major within tile)
+                    size_t tile_pos = (r * tile_cols + c) * mat->element_size;
+                    
+                    if (mat_row < mat->rows && mat_col < mat->cols) {
+                        // Copy actual matrix data
+                        void* src = (char*)mat->data[mat_row] + mat_col * mat->element_size;
+                        memcpy(tile_dest + tile_pos, src, mat->element_size);
+                    } else {
+                        // Fill with zeros for padding
+                        memset(tile_dest + tile_pos, 0, mat->element_size);
+                    }
+                }
+            }
+        }
+    }
+    
+    return data;
+}
+
 Matrix* matrix_clone(const Matrix* mat) {
     if (!mat) return NULL;
     Matrix* copy = (Matrix*)malloc(sizeof(Matrix));
