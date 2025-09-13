@@ -73,25 +73,27 @@ int test_pim_identity_square_matrix_multiplication() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -119,25 +121,27 @@ int test_pim_square_matrix_multiplication() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -165,25 +169,27 @@ int test_pim_transfer_misaligned_matrix_multiplication() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -211,25 +217,27 @@ int test_pim_frame_misaligned_matrix_multiplication() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -262,25 +270,27 @@ int test_pim_rectangular_matrix_multiplication() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -308,25 +318,27 @@ int test_pim_square_prime_number_of_dpus() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -354,25 +366,27 @@ int test_pim_square_multi_tile_identity() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -400,25 +414,27 @@ int test_pim_square_multi_tile() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
@@ -447,25 +463,27 @@ int test_pim_multiple_tiles_per_row() {
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
-    printf(": %dx%d, Result dimensions: %dx%d\n",
-           expected_result->rows, expected_result->cols, result->rows, result->cols);
-    printf("Expected matrix:\n");
-    for (int i = 0; i < expected_result->rows; i++) {
-        for (int j = 0; j < expected_result->cols; j++) {
-            int16_t val;
-            matrix_get(expected_result, i, j, &val);
-            printf("| %d ", val);
+    if (!matrix_compare(result, expected_result)) {
+        printf(": %dx%d, Result dimensions: %dx%d\n",
+            expected_result->rows, expected_result->cols, result->rows, result->cols);
+        printf("Expected matrix:\n");
+        for (int i = 0; i < expected_result->rows; i++) {
+            for (int j = 0; j < expected_result->cols; j++) {
+                int16_t val;
+                matrix_get(expected_result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
-    }
-    printf("Result matrix:\n");
-    for (int i = 0; i < result->rows; i++) {
-        for (int j = 0; j < result->cols; j++) {
-            int16_t val;
-            matrix_get(result, i, j, &val);
-            printf("| %d ", val);
+        printf("Result matrix:\n");
+        for (int i = 0; i < result->rows; i++) {
+            for (int j = 0; j < result->cols; j++) {
+                int16_t val;
+                matrix_get(result, i, j, &val);
+                printf("| %d ", val);
+            }
+            printf("|\n");
         }
-        printf("|\n");
     }
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     ASSERT_TRUE(matrix_compare(result, expected_result), "Result matrix should match expected result");
