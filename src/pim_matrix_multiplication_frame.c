@@ -399,11 +399,11 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
 
     DPU_ASSERT(dpu_launch(frame->dpu_set, DPU_SYNCHRONOUS));
 
-    // #ifdef DEBUG
+    #ifdef DEBUG
     DPU_FOREACH(frame->dpu_set, dpu) {
         DPU_ASSERT(dpu_log_read(dpu, stdout));
     }
-    // #endif // DEBUG
+    #endif // DEBUG
 
     frame->result_valid = true; // Mark result as valid after execution
     return;

@@ -66,12 +66,12 @@ void compute_tile_tasklet(int tasklet_id, int n_tasklets,
 
     for (int i = row0; i < row_max; ++i) {
         for (int j = 0; j < n_tile; ++j) {
-            uint32_t sum = 0;
+            uint16_t sum = 0;
             for (int kk = 0; kk < k_tile; ++kk) {
                 // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
-                sum += (uint32_t)A_buf[i * k_tile + kk] * (uint32_t)B_buf[j * k_tile + kk];
+                sum += (uint8_t)A_buf[i * k_tile + kk] * (uint8_t)B_buf[j * k_tile + kk];
             }
-            C_buf[i * n_tile + j] += (uint16_t)sum;
+            C_buf[i * n_tile + j] += sum;
         }
     }
 }
@@ -137,6 +137,7 @@ int main() {
     uint16_t result_tiles_rowwise = matrix1_tiles_rowwise;
     uint16_t result_tiles_colwise = matrix2_tiles_colwise;
 
+    #ifdef DEBUG
     if (pid == 0) {
         printf("[DPU %d] Tile dimensions debug:\n", pid);
         printf("[DPU %d]   matrix1_tile_rows=%d, matrix1_tile_cols=%d (size=%zu bytes)\n", 
@@ -150,6 +151,7 @@ int main() {
                matrix2_tiles_rowwise, matrix2_tiles_colwise,
                result_tiles_rowwise, result_tiles_colwise);
     }
+    #endif
 
     barrier_wait(&my_barrier);
 
@@ -161,6 +163,7 @@ int main() {
         return -1;
     }
 
+#ifdef DEBUG
     if (pid == 0) {
         printf("[DPU %d] Matrix dimensions: A=%dx%d, B=%dx%d, C=%dx%d\n", 
                pid, MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols,
@@ -169,6 +172,7 @@ int main() {
         printf("[DPU %d] Result tiles: %dx%d, Starting ping-pong buffer computation\n", 
                pid, result_tiles_rowwise, result_tiles_colwise);
     }
+#endif
 
     // Ping-pong buffer implementation with separate result buffer management
     int input_compute_buffer = 0;
@@ -179,10 +183,11 @@ int main() {
     
     for (int i = 0; i < result_tiles_rowwise; i++) {
         for (int j = 0; j < result_tiles_colwise; j++) {
+#ifdef DEBUG
             if (pid == 0) {
                 printf("[DPU %d] Processing result tile [%d,%d] using result buffer %d\n", pid, i, j, 0);
             }
-            
+#endif  
             // Clear result buffer for new result tile
             if (pid == 0) {
                 for (size_t idx = 0; idx < result_elements; idx++) {
@@ -195,10 +200,12 @@ int main() {
             
             // Accumulate across all K iterations for this result tile
             for (int k = 0; k < matrix1_tiles_colwise; k++) {
+#ifdef DEBUG
                 if (pid == 0) {
                     printf("[DPU %d] K iteration %d/%d, input buffers: compute=%d, load=%d, result buffer=%d\n", 
                            pid, k, matrix1_tiles_colwise-1, input_compute_buffer, input_load_buffer, 0);
                 }
+#endif
                 
                 // Thread 0: Handle memory operations for next iteration
                 if (pid == 0) {
@@ -207,11 +214,12 @@ int main() {
                         (i * matrix1_tiles_colwise + k) * matrix1_tile_size_bytes);
                     load_A_tile_from_mram(mram_addr_A, matrix1_wram[input_load_buffer], 
                                          matrix1_tile_size_bytes);
-                    printf("\n");
                     __mram_ptr void *mram_addr_B = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER + 
                         (k * matrix2_tiles_colwise + j) * matrix2_tile_size_bytes);
+#ifdef DEBUG
                     printf("[DPU %d] Loading B tile for [%d,%d] from MRAM addr:%p to input buffer %d\n", 
                            pid, k, j, mram_addr_B, input_load_buffer);
+#endif
                     load_B_tile_from_mram(mram_addr_B, matrix2_wram[input_load_buffer], 
                                          matrix2_tile_size_bytes);
                 }
@@ -254,8 +262,10 @@ int main() {
                 __mram_ptr void *result_mram_addr = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.result_start_offset + DPU_MRAM_HEAP_POINTER + 
                     ((i * result_tiles_colwise + j) * result_tile_size_bytes));
                 write_C_tile_to_mram(result_wram[0], result_mram_addr, result_tile_size_bytes);
+#ifdef DEBUG
                 printf("[DPU %d] Wrote back completed result tile [%d,%d] to MRAM addr:%p from result buffer %d\n", 
                        pid, i, j, result_mram_addr, 0);
+#endif
                 // Switch to the other result buffer for the next result tile
                 result_buffer = 1 - result_buffer;
             }
@@ -264,9 +274,11 @@ int main() {
         }
     }
 
+#ifdef DEBUG
     if (pid == 0) {
         printf("[DPU %d] Matrix multiplication kernel completed successfully\n", pid);
     }
+#endif
 
     // Wait for all operations to complete
     barrier_wait(&my_barrier);

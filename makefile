@@ -19,6 +19,8 @@ docker-build:
 
 CC ?= gcc
 
+DEBUG ?= 0
+
 # Use project root from environment variable
 ROOT ?= $(PIM_MATMUL_BENCHMARKS_ROOT)
 
@@ -33,6 +35,9 @@ RUNTIME_PARAM_FLAGS := $(shell python3 -c "import yaml; params=yaml.safe_load(op
 
 CFLAGS += $(INCLUDE_DIRS)
 CFLAGS += $(RUNTIME_PARAM_FLAGS)
+ifeq ($(DEBUG),1)
+CFLAGS += -DDEBUG
+endif
 
 clean:
 	rm -rf lib/simplepim
