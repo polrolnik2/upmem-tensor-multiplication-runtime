@@ -508,7 +508,7 @@ int main() {
         printf("[PASS] All PIM matrix tests passed!\n");
         return 0;
     } else {
-        printf("[FAIL] %d PIM matrix tests failed.\n", fails);
+        printf("%d PIM matrix tests failed.\n", fails);
         return 1;
     }
 }
