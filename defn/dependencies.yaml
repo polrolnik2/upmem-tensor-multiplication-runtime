@@ -8,3 +8,4 @@ sources:
 include_dirs:
   - src/
   - lib/simplepim/
+  - common/

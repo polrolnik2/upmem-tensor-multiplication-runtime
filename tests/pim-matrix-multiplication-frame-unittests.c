@@ -6,49 +6,8 @@
 #include "matrix.h"
 #include "pim_matrix_multiplication_frame.h"
 
-Matrix* host_multiply_matrices(const Matrix* matrix1, const Matrix* matrix2) {
-    if (!matrix1 || !matrix2 || matrix1->cols != matrix2->rows) return NULL;
-    uint16_t * result_data_row_major = malloc(matrix1->rows * matrix2->cols * sizeof(uint16_t));
-    if (!result_data_row_major) return NULL;
-    for (int i = 0; i < matrix1->rows; i++) {
-        for (int j = 0; j < matrix2->cols; j++) {
-            uint16_t sum = 0;
-            for (int k = 0; k < matrix1->cols; k++) {
-                uint8_t val1, val2;
-                matrix_get(matrix1, i, k, &val1);
-                matrix_get(matrix2, k, j, &val2);
-                sum += val1 * val2;
-            }
-            result_data_row_major[i*matrix2->cols + j] = sum;
-        }
-    }
-    Matrix* result = matrix_create_from_row_major_array(matrix1->rows, matrix2->cols, result_data_row_major, sizeof(uint16_t));
-    if (!result) {
-        free(result_data_row_major);
-        return NULL;
-    }
-    free(result_data_row_major);
-    return result;
-}
-
-Matrix*  dpu_multiply_matrices(Matrix* matrix1, Matrix* matrix2, uint32_t num_dpus) {
-    // Create a sample matrix multiplication frame
-    pim_matrix_multiplication_frame_t* frame = create_pim_matrix_multiplication_frame(num_dpus, 0, matrix1->rows, matrix1->cols, matrix2->rows, matrix2->cols, matrix1->rows, matrix2->cols,
-                                                                                      sizeof(int8_t), sizeof(int8_t), sizeof(uint16_t));
-    if (!frame) {
-        fprintf(stderr, "Frame creation failed");
-        return NULL;
-    }
-    pim_matrix_multiplication_frame_load_first_matrix(frame, matrix1);
-    pim_matrix_multiplication_frame_load_second_matrix(frame, matrix2);
-    pim_matrix_multiplication_frame_execute(frame);
-    Matrix* result = pim_matrix_multiplication_frame_get_result(frame);
-    if (!result) {
-        fprintf(stderr, "Result retrieval failed");
-        return NULL;
-    }
-    return result;
-}
+#include "host_multiply_matrices.h"
+#include "dpu_multiply_matrices.h"
 
 int test_pim_identity_square_matrix_multiplication() {
     printf("Running test_pim_identity_square_matrix_multiplication...\n");
