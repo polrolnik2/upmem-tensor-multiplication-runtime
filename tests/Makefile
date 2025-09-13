@@ -14,9 +14,18 @@ INCLUDE_DIRS := $(shell python3 -c "import yaml; print(' '.join('-I$(ROOT)/'+d f
 PARAMS_YAML := $(ROOT)/defn/params.yaml
 RUNTIME_PARAM_FLAGS := $(shell python3 -c "import yaml; params=yaml.safe_load(open('$(PARAMS_YAML)')); print(' '.join([f'-D{k}={v}' for item in params.get('runtime_params', []) for k, v in item.items()]))" 2>/dev/null || echo "")
 
+DEBUG ?= 0
+TIMER ?= 0
+
 CFLAGS += $(INCLUDE_DIRS)
 CFLAGS += -Icommon/
 CFLAGS += $(RUNTIME_PARAM_FLAGS)
+ifeq ($(DEBUG),1)
+CFLAGS += -DDEBUG 
+endif
+ifeq ($(TIMER),1)
+CFLAGS += -DTIMER 
+endif
 
 run:
 	@if [ -z "$(FILE)" ]; then \

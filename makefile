@@ -20,6 +20,7 @@ docker-build:
 CC ?= gcc
 
 DEBUG ?= 0
+TIMER ?= 0
 
 # Use project root from environment variable
 ROOT ?= $(PIM_MATMUL_BENCHMARKS_ROOT)
@@ -37,6 +38,9 @@ CFLAGS += $(INCLUDE_DIRS)
 CFLAGS += $(RUNTIME_PARAM_FLAGS)
 ifeq ($(DEBUG),1)
 CFLAGS += -DDEBUG
+endif
+ifeq ($(TIMER),1)
+CFLAGS += -DTIMER
 endif
 
 clean:
@@ -63,7 +67,7 @@ run-unittests: docker-build bin build-dpu
 	  docker run --rm --platform linux/amd64 -v $(CURDIR):/workspace $(DOCKER_IMAGE) bash -c \
 		". /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator && \
 		. /workspace/source.me && \
-		make -C tests run FILE=$$(basename $$t)"; \
+		make -C tests run FILE=$$(basename $$t) DEBUG=$(DEBUG) TIMER=$(TIMER)"; \
 	done; \
 	python3 scripts/parse_unittest_logs.py
 
@@ -72,7 +76,7 @@ build-dpu: docker-build bin
 	docker run --rm --platform linux/amd64 -v $(CURDIR):/workspace $(DOCKER_IMAGE) bash -c \
 		". /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator && \
 		. /workspace/source.me && \
-		dpu-upmem-dpurte-clang -O2 $(RUNTIME_PARAM_FLAGS) -g -o /workspace/bin/matrix_multiply_dpu /workspace/src/dpu/pim_dpu_matrix_multiply.c -I src"
+		dpu-upmem-dpurte-clang -O2 $(CFLAGS) -g -o /workspace/bin/matrix_multiply_dpu /workspace/src/dpu/pim_dpu_matrix_multiply.c -I src"
 
 # Documentation directories
 DOCS_DIR := docs
