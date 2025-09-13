@@ -115,7 +115,7 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
     frame->result_type_size = result_type_size;
 
     // Calculate tile dimensions first, before memory layout
-    frame->wram_input_tile_size = 1024; // Size of input tile in WRAM
+    frame->wram_input_tile_size = TILE_SIZE; // Size of input tile in WRAM
 
     uint32_t num_input_scalars_per_tile = frame->wram_input_tile_size / frame->matrix1_type_size;
     uint32_t tile_dim = (sqrt(num_input_scalars_per_tile));
