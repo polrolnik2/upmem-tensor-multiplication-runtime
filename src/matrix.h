@@ -19,8 +19,8 @@
  * Data is stored in row-major order.
  */
 typedef struct {
-    int16_t rows;          ///< Number of rows
-    int16_t cols;          ///< Number of columns
+    unsigned int rows;          ///< Number of rows
+    unsigned int cols;          ///< Number of columns
     void** data;           ///< Pointer to matrix data (array of pointers to rows)
     uint32_t element_size; ///< Size of each element in bytes
 } Matrix;
@@ -33,7 +33,7 @@ typedef struct {
  * @param element_size Size of each element in bytes.
  * @return Pointer to new Matrix, or NULL on failure.
  */
-Matrix* matrix_create_from_2d_array(int16_t rows, int16_t cols, void **data, uint32_t element_size);
+Matrix* matrix_create_from_2d_array(unsigned int  rows, unsigned int  cols, void **data, uint32_t element_size);
 
 /**
  * @brief Create a new matrix with specified dimensions from a row major array.
@@ -43,7 +43,7 @@ Matrix* matrix_create_from_2d_array(int16_t rows, int16_t cols, void **data, uin
  * @param element_size Size of each element in bytes.
  * @return Pointer to new Matrix, or NULL on failure.
  */
-Matrix* matrix_create_from_row_major_array(int16_t rows, int16_t cols, void *data, uint32_t element_size);
+Matrix* matrix_create_from_row_major_array(unsigned int  rows, unsigned int  cols, void *data, uint32_t element_size);
 
 /**
  * @brief Create a new matrix with specified dimensions from a column major array.
@@ -53,7 +53,7 @@ Matrix* matrix_create_from_row_major_array(int16_t rows, int16_t cols, void *dat
  * @param element_size Size of each element in bytes.
  * @return Pointer to new Matrix, or NULL on failure.
  */
-Matrix* matrix_create_from_column_major_array(int16_t rows, int16_t cols, void *data, uint32_t element_size);
+Matrix* matrix_create_from_column_major_array(unsigned int  rows, unsigned int  cols, void *data, uint32_t element_size);
 
 /**
  * @brief Create a new matrix from a 4D tiled array in row-major order.
@@ -65,8 +65,8 @@ Matrix* matrix_create_from_column_major_array(int16_t rows, int16_t cols, void *
  * @param element_size Size of each element in bytes.
  * @return Pointer to new Matrix, or NULL on failure.
  */
-Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16_t num_col_tiles,
-                                                   int16_t tile_rows, int16_t tile_cols,
+Matrix* matrix_create_from_4d_row_major_tiled_array(unsigned int  num_row_tiles, unsigned int  num_col_tiles,
+                                                   unsigned int  tile_rows, unsigned int  tile_cols,
                                                    void *data, uint32_t element_size);
 
 /**
@@ -112,7 +112,7 @@ void* matrix_get_data_column_major(const Matrix* mat);
  * @param tile_cols Number of columns per tile.
  * @return Pointer to new 4D tiled row-major array (caller must free), or NULL on failure.
  */
-void* matrix_get_data_4d_row_major_tiled(const Matrix* mat, int16_t tile_rows, int16_t tile_cols);
+void* matrix_get_data_4d_row_major_tiled(const Matrix* mat, unsigned int  tile_rows, unsigned int  tile_cols);
 
 /**
  * @brief Create a deep copy of a matrix.
@@ -203,7 +203,7 @@ Matrix * matrix_join_by_cols(Matrix **submatrices, int num_submatrices);
  * @param fill_value Pointer to the constant value to fill new rows with (defaults to 0 if NULL).
  * @return Pointer to new Matrix with added rows (caller must free), or NULL on failure.
  */
-Matrix* matrix_add_rows(const Matrix* mat, int16_t num_rows, const void* fill_value);
+Matrix* matrix_add_rows(const Matrix* mat, unsigned int  num_rows, const void* fill_value);
 
 /**
  * @brief Add columns filled with a constant value to the end of a matrix.
@@ -212,7 +212,7 @@ Matrix* matrix_add_rows(const Matrix* mat, int16_t num_rows, const void* fill_va
  * @param fill_value Pointer to the constant value to fill new columns with (defaults to 0 if NULL).
  * @return Pointer to new Matrix with added columns (caller must free), or NULL on failure.
  */
-Matrix* matrix_add_cols(const Matrix* mat, int16_t num_cols, const void* fill_value);
+Matrix* matrix_add_cols(const Matrix* mat, unsigned int  num_cols, const void* fill_value);
 
 /**
  * @brief Remove rows from the end of a matrix.
@@ -220,7 +220,7 @@ Matrix* matrix_add_cols(const Matrix* mat, int16_t num_cols, const void* fill_va
  * @param num_rows Number of rows to remove from the end.
  * @return Pointer to new Matrix with removed rows (caller must free), or NULL on failure.
  */
-Matrix* matrix_remove_rows(const Matrix* mat, int16_t num_rows);
+Matrix* matrix_remove_rows(const Matrix* mat, unsigned int  num_rows);
 
 /**
  * @brief Remove columns from the end of a matrix.
@@ -228,7 +228,7 @@ Matrix* matrix_remove_rows(const Matrix* mat, int16_t num_rows);
  * @param num_cols Number of columns to remove from the end.
  * @return Pointer to new Matrix with removed columns (caller must free), or NULL on failure.
  */
-Matrix* matrix_remove_cols(const Matrix* mat, int16_t num_cols);
+Matrix* matrix_remove_cols(const Matrix* mat, unsigned int  num_cols);
 
 /**
  * @brief Extract a submatrix with specified dimensions from the top-left corner.
@@ -237,7 +237,7 @@ Matrix* matrix_remove_cols(const Matrix* mat, int16_t num_cols);
  * @param target_cols Number of columns to extract.
  * @return Pointer to new Matrix with extracted dimensions (caller must free), or NULL on failure.
  */
-Matrix* matrix_extract_submatrix(const Matrix* mat, int16_t target_rows, int16_t target_cols);
+Matrix* matrix_extract_submatrix(const Matrix* mat, unsigned int  target_rows, unsigned int  target_cols);
 
 /**
  * @brief Transpose a matrix (swap rows and columns).
@@ -248,13 +248,13 @@ Matrix* matrix_transpose(const Matrix* mat);
 
 // Type-safe helper macros for common data types
 #define MATRIX_CREATE_INT8(rows, cols, data) matrix_create_from_2d_array(rows, cols, (void**)data, sizeof(int8_t))
-#define MATRIX_CREATE_INT16(rows, cols, data) matrix_create_from_2d_array(rows, cols, (void**)data, sizeof(int16_t))
+#define MATRIX_CREATE_INT16(rows, cols, data) matrix_create_from_2d_array(rows, cols, (void**)data, sizeof(unsigned int ))
 #define MATRIX_CREATE_INT32(rows, cols, data) matrix_create_from_2d_array(rows, cols, (void**)data, sizeof(int32_t))
 #define MATRIX_CREATE_FLOAT(rows, cols, data) matrix_create_from_2d_array(rows, cols, (void**)data, sizeof(float))
 #define MATRIX_CREATE_DOUBLE(rows, cols, data) matrix_create_from_2d_array(rows, cols, (void**)data, sizeof(double))
 
 #define MATRIX_CREATE_FROM_ARRAY_INT8(rows, cols, data) matrix_create_from_row_major_array(rows, cols, data, sizeof(int8_t))
-#define MATRIX_CREATE_FROM_ARRAY_INT16(rows, cols, data) matrix_create_from_row_major_array(rows, cols, data, sizeof(int16_t))
+#define MATRIX_CREATE_FROM_ARRAY_INT16(rows, cols, data) matrix_create_from_row_major_array(rows, cols, data, sizeof(unsigned int ))
 #define MATRIX_CREATE_FROM_ARRAY_INT32(rows, cols, data) matrix_create_from_row_major_array(rows, cols, data, sizeof(int32_t))
 #define MATRIX_CREATE_FROM_ARRAY_FLOAT(rows, cols, data) matrix_create_from_row_major_array(rows, cols, data, sizeof(float))
 #define MATRIX_CREATE_FROM_ARRAY_DOUBLE(rows, cols, data) matrix_create_from_row_major_array(rows, cols, data, sizeof(double))

@@ -5,7 +5,7 @@
 #include "matrix.h"
 #include <string.h>
 
-Matrix* matrix_create_from_2d_array(int16_t rows, int16_t cols, void **data, uint32_t element_size) {
+Matrix* matrix_create_from_2d_array(unsigned int rows, unsigned int cols, void **data, uint32_t element_size) {
     if (rows <= 0 || cols <= 0 || !data || element_size == 0) return NULL;
     Matrix* mat = (Matrix*)malloc(sizeof(Matrix));
     if (!mat) return NULL;
@@ -30,7 +30,7 @@ Matrix* matrix_create_from_2d_array(int16_t rows, int16_t cols, void **data, uin
     return mat;
 }
 
-Matrix* matrix_create_from_row_major_array(int16_t rows, int16_t cols, void *data, uint32_t element_size) {
+Matrix* matrix_create_from_row_major_array(unsigned int rows, unsigned int cols, void *data, uint32_t element_size) {
     if (rows <= 0 || cols <= 0 || !data || element_size == 0) return NULL;
     Matrix* mat = (Matrix*)malloc(sizeof(Matrix));
     if (!mat) return NULL;
@@ -55,7 +55,7 @@ Matrix* matrix_create_from_row_major_array(int16_t rows, int16_t cols, void *dat
     return mat;
 }
 
-Matrix* matrix_create_from_column_major_array(int16_t rows, int16_t cols, void *data, uint32_t element_size) {
+Matrix* matrix_create_from_column_major_array(unsigned int rows, unsigned int cols, void *data, uint32_t element_size) {
     if (rows <= 0 || cols <= 0 || !data || element_size == 0) return NULL;
     Matrix* mat = (Matrix*)malloc(sizeof(Matrix));
     if (!mat) return NULL;
@@ -84,8 +84,8 @@ Matrix* matrix_create_from_column_major_array(int16_t rows, int16_t cols, void *
     return mat;
 }
 
-Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16_t num_col_tiles,
-                                                   int16_t tile_rows, int16_t tile_cols,
+Matrix* matrix_create_from_4d_row_major_tiled_array(unsigned int num_row_tiles, unsigned int num_col_tiles,
+                                                   unsigned int tile_rows, unsigned int tile_cols,
                                                    void *data, uint32_t element_size) {
     if (num_row_tiles <= 0 || num_col_tiles <= 0 || tile_rows <= 0 || tile_cols <= 0 || !data || element_size == 0) return NULL;
     
@@ -98,16 +98,16 @@ Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16
     if (!tiles) goto cleanup;
     
     // Initialize all pointers to NULL for safe cleanup
-    for (int16_t i = 0; i < num_row_tiles; i++) {
+    for (unsigned int i = 0; i < num_row_tiles; i++) {
         tiles[i] = NULL;
     }
     
-    for (int16_t i = 0; i < num_row_tiles; i++) {
+    for (unsigned int i = 0; i < num_row_tiles; i++) {
         tiles[i] = (Matrix**)malloc(num_col_tiles * sizeof(Matrix*));
         if (!tiles[i]) goto cleanup;
         
         // Initialize all tile pointers to NULL for safe cleanup
-        for (int16_t j = 0; j < num_col_tiles; j++) {
+        for (unsigned int j = 0; j < num_col_tiles; j++) {
             tiles[i][j] = NULL;
         }
     }
@@ -116,8 +116,8 @@ Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16
     char* src_data = (char*)data;
     size_t tile_size_bytes = tile_rows * tile_cols * element_size;
     
-    for (int16_t tile_row = 0; tile_row < num_row_tiles; tile_row++) {
-        for (int16_t tile_col = 0; tile_col < num_col_tiles; tile_col++) {
+    for (unsigned int tile_row = 0; tile_row < num_row_tiles; tile_row++) {
+        for (unsigned int tile_col = 0; tile_col < num_col_tiles; tile_col++) {
             // Calculate the offset for this tile in the source data
             size_t tile_offset = (tile_row * num_col_tiles + tile_col) * tile_size_bytes;
             void* tile_data = src_data + tile_offset;
@@ -132,7 +132,7 @@ Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16
     row_matrices = (Matrix**)malloc(num_row_tiles * sizeof(Matrix*));
     if (!row_matrices) goto cleanup;
     
-    for (int16_t row = 0; row < num_row_tiles; row++) {
+    for (unsigned int row = 0; row < num_row_tiles; row++) {
         row_matrices[row] = matrix_join_by_cols(tiles[row], num_col_tiles);
         if (!row_matrices[row]) goto cleanup;
     }
@@ -142,9 +142,9 @@ Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16
     if (!result) goto cleanup;
     
     // Clean up intermediate structures but keep the result
-    for (int16_t r = 0; r < num_row_tiles; r++) {
+    for (unsigned int r = 0; r < num_row_tiles; r++) {
         if (tiles[r]) {
-            for (int16_t c = 0; c < num_col_tiles; c++) {
+            for (unsigned int c = 0; c < num_col_tiles; c++) {
                 if (tiles[r][c]) matrix_free(tiles[r][c]);
             }
             free(tiles[r]);
@@ -158,9 +158,9 @@ Matrix* matrix_create_from_4d_row_major_tiled_array(int16_t num_row_tiles, int16
 
 cleanup:
     if (tiles) {
-        for (int16_t r = 0; r < num_row_tiles; r++) {
+        for (unsigned int r = 0; r < num_row_tiles; r++) {
             if (tiles[r]) {
-                for (int16_t c = 0; c < num_col_tiles; c++) {
+                for (unsigned int c = 0; c < num_col_tiles; c++) {
                     if (tiles[r][c]) matrix_free(tiles[r][c]);
                 }
                 free(tiles[r]);
@@ -170,7 +170,7 @@ cleanup:
     }
     
     if (row_matrices) {
-        for (int16_t r = 0; r < num_row_tiles; r++) {
+        for (unsigned int r = 0; r < num_row_tiles; r++) {
             if (row_matrices[r]) matrix_free(row_matrices[r]);
         }
         free(row_matrices);
@@ -240,12 +240,12 @@ void* matrix_get_data_column_major(const Matrix* mat) {
     return data;
 }
 
-void* matrix_get_data_4d_row_major_tiled(const Matrix* mat, int16_t tile_rows, int16_t tile_cols) {
+void* matrix_get_data_4d_row_major_tiled(const Matrix* mat, unsigned int tile_rows, unsigned int tile_cols) {
     if (!mat || tile_rows <= 0 || tile_cols <= 0) return NULL;
     
     // Calculate number of tiles needed
-    int16_t num_row_tiles = (mat->rows + tile_rows - 1) / tile_rows;  // Ceiling division
-    int16_t num_col_tiles = (mat->cols + tile_cols - 1) / tile_cols;  // Ceiling division
+    unsigned int num_row_tiles = (mat->rows + tile_rows - 1) / tile_rows;  // Ceiling division
+    unsigned int num_col_tiles = (mat->cols + tile_cols - 1) / tile_cols;  // Ceiling division
     
     // Allocate memory for the 4D tiled data
     size_t total_tiles = num_row_tiles * num_col_tiles;
@@ -256,18 +256,18 @@ void* matrix_get_data_4d_row_major_tiled(const Matrix* mat, int16_t tile_rows, i
     char* dest_data = (char*)data;
     
     // Fill tiles in row-major order
-    for (int16_t tile_row = 0; tile_row < num_row_tiles; tile_row++) {
-        for (int16_t tile_col = 0; tile_col < num_col_tiles; tile_col++) {
+    for (unsigned int tile_row = 0; tile_row < num_row_tiles; tile_row++) {
+        for (unsigned int tile_col = 0; tile_col < num_col_tiles; tile_col++) {
             // Calculate the offset for this tile in the destination data
             size_t tile_offset = (tile_row * num_col_tiles + tile_col) * tile_size_bytes;
             char* tile_dest = dest_data + tile_offset;
             
             // Fill this tile with data from the matrix
-            for (int16_t r = 0; r < tile_rows; r++) {
-                for (int16_t c = 0; c < tile_cols; c++) {
+            for (unsigned int r = 0; r < tile_rows; r++) {
+                for (unsigned int c = 0; c < tile_cols; c++) {
                     // Calculate the actual matrix position
-                    int16_t mat_row = tile_row * tile_rows + r;
-                    int16_t mat_col = tile_col * tile_cols + c;
+                    unsigned int mat_row = tile_row * tile_rows + r;
+                    unsigned int mat_col = tile_col * tile_cols + c;
                     
                     // Calculate position in the tile data (row-major within tile)
                     size_t tile_pos = (r * tile_cols + c) * mat->element_size;
@@ -339,8 +339,8 @@ char* matrix_sprint(const Matrix* mat, const char* format) {
                 uint8_t value;
                 memcpy(&value, (char*)mat->data[r] + c * mat->element_size, mat->element_size);
                 pos += snprintf(buf + pos, bufsize - pos, format, value);
-            } else if (mat->element_size == sizeof(int16_t)) {
-                int16_t value;
+            } else if (mat->element_size == sizeof(unsigned int)) {
+                unsigned int value;
                 memcpy(&value, (char*)mat->data[r] + c * mat->element_size, mat->element_size);
                 pos += snprintf(buf + pos, bufsize - pos, format, value);
             } else if (mat->element_size == sizeof(int32_t)) {
@@ -381,8 +381,8 @@ void matrix_print(const Matrix* mat, const char* format) {
                 uint8_t value;
                 memcpy(&value, (char*)mat->data[r] + c * mat->element_size, mat->element_size);
                 printf(format, value);
-            } else if (mat->element_size == sizeof(int16_t)) {
-                int16_t value;
+            } else if (mat->element_size == sizeof(unsigned int)) {
+                unsigned int value;
                 memcpy(&value, (char*)mat->data[r] + c * mat->element_size, mat->element_size);
                 printf(format, value);
             } else if (mat->element_size == sizeof(int32_t)) {
@@ -585,7 +585,7 @@ Matrix* matrix_join_by_cols(Matrix** submatrices, int num_submatrices) {
     return mat;
 }
 
-Matrix* matrix_add_rows(const Matrix* mat, int16_t num_rows, const void* fill_value) {
+Matrix* matrix_add_rows(const Matrix* mat, unsigned int num_rows, const void* fill_value) {
     if (!mat || num_rows < 0) return NULL;
 
     if (num_rows == 0) {
@@ -593,8 +593,8 @@ Matrix* matrix_add_rows(const Matrix* mat, int16_t num_rows, const void* fill_va
         return matrix_clone(mat);
     }
     
-    int16_t new_rows = mat->rows + num_rows;
-    int16_t cols = mat->cols;
+    unsigned int new_rows = mat->rows + num_rows;
+    unsigned int cols = mat->cols;
     
     // Create new matrix data structure
     void** new_data = (void**)malloc(new_rows * sizeof(void*));
@@ -653,7 +653,7 @@ Matrix* matrix_add_rows(const Matrix* mat, int16_t num_rows, const void* fill_va
     return result;
 }
 
-Matrix* matrix_add_cols(const Matrix* mat, int16_t num_cols, const void* fill_value) {
+Matrix* matrix_add_cols(const Matrix* mat, unsigned int num_cols, const void* fill_value) {
     if (!mat || num_cols < 0) return NULL;
 
     if (num_cols == 0) {
@@ -661,8 +661,8 @@ Matrix* matrix_add_cols(const Matrix* mat, int16_t num_cols, const void* fill_va
         return matrix_clone(mat);
     }
     
-    int16_t rows = mat->rows;
-    int16_t new_cols = mat->cols + num_cols;
+    unsigned int rows = mat->rows;
+    unsigned int new_cols = mat->cols + num_cols;
     
     // Create new matrix data structure  
     void** new_data = (void**)malloc(rows * sizeof(void*));
@@ -712,7 +712,7 @@ Matrix* matrix_add_cols(const Matrix* mat, int16_t num_cols, const void* fill_va
     return result;
 }
 
-Matrix* matrix_remove_rows(const Matrix* mat, int16_t num_rows) {
+Matrix* matrix_remove_rows(const Matrix* mat, unsigned int num_rows) {
     if (!mat || num_rows < 0) return NULL;
     
     if (num_rows == 0) {
@@ -725,8 +725,8 @@ Matrix* matrix_remove_rows(const Matrix* mat, int16_t num_rows) {
         return NULL;
     }
     
-    int16_t new_rows = mat->rows - num_rows;
-    int16_t cols = mat->cols;
+    unsigned int new_rows = mat->rows - num_rows;
+    unsigned int cols = mat->cols;
     
     // Create new matrix data structure
     void** new_data = (void**)malloc(new_rows * sizeof(void*));
@@ -753,7 +753,7 @@ Matrix* matrix_remove_rows(const Matrix* mat, int16_t num_rows) {
     return result;
 }
 
-Matrix* matrix_remove_cols(const Matrix* mat, int16_t num_cols) {
+Matrix* matrix_remove_cols(const Matrix* mat, unsigned int num_cols) {
     if (!mat || num_cols < 0) return NULL;
     
     if (num_cols == 0) {
@@ -766,8 +766,8 @@ Matrix* matrix_remove_cols(const Matrix* mat, int16_t num_cols) {
         return NULL;
     }
     
-    int16_t rows = mat->rows;
-    int16_t new_cols = mat->cols - num_cols;
+    unsigned int rows = mat->rows;
+    unsigned int new_cols = mat->cols - num_cols;
     
     // Create new matrix data structure  
     void** new_data = (void**)malloc(rows * sizeof(void*));
@@ -796,7 +796,7 @@ Matrix* matrix_remove_cols(const Matrix* mat, int16_t num_cols) {
     return result;
 }
 
-Matrix* matrix_extract_submatrix(const Matrix* mat, int16_t target_rows, int16_t target_cols) {
+Matrix* matrix_extract_submatrix(const Matrix* mat, unsigned int target_rows, unsigned int target_cols) {
     if (!mat || target_rows <= 0 || target_cols <= 0) return NULL;
     
     if (target_rows > mat->rows || target_cols > mat->cols) {
@@ -810,12 +810,12 @@ Matrix* matrix_extract_submatrix(const Matrix* mat, int16_t target_rows, int16_t
     }
     
     // First remove excess rows from the bottom
-    int16_t rows_to_remove = mat->rows - target_rows;
+    unsigned int rows_to_remove = mat->rows - target_rows;
     Matrix* temp_matrix = matrix_remove_rows(mat, rows_to_remove);
     if (!temp_matrix) return NULL;
     
     // Then remove excess columns from the right
-    int16_t cols_to_remove = mat->cols - target_cols;
+    unsigned int cols_to_remove = mat->cols - target_cols;
     Matrix* result = matrix_remove_cols(temp_matrix, cols_to_remove);
     
     // Clean up temporary matrix
