@@ -30,7 +30,6 @@ static inline void load_A_tile_from_mram(__mram_ptr void *src, uint8_t *dst, siz
     for (size_t offset = 0; offset < bytes; offset += 2048) {
         mram_read(src + offset, dst + offset, (bytes - offset) < 2048 ? (bytes - offset) : 2048);
     }
-    mram_read(src, dst, bytes);
 }
 
 static inline void load_B_tile_from_mram(__mram_ptr void *src, uint8_t *dst, size_t bytes) {
@@ -39,7 +38,7 @@ static inline void load_B_tile_from_mram(__mram_ptr void *src, uint8_t *dst, siz
     }
 }
 
-static inline void write_C_tile_to_mram(uint16_t *src, __mram_ptr void *dst, size_t bytes) {
+static inline void write_C_tile_to_mram(void *src, __mram_ptr void *dst, size_t bytes) {
     for (size_t offset = 0; offset < bytes; offset += 2048) {
         mram_write(src + offset, dst + offset, (bytes - offset) < 2048 ? (bytes - offset) : 2048);
     }
@@ -106,13 +105,6 @@ int main() {
             !matrix1_wram[1] || !matrix2_wram[1] || !result_wram[1]) {
             printf("[DPU %d] ERROR: Failed to allocate memory for matrix buffers\n", pid);
             return -1;
-        }
-        
-        // Initialize result buffers to zero
-        size_t result_elements = 2 * (MATRIX_MULTIPLY_ARGUMENTS.wram_input_tile_size / sizeof(uint16_t));
-        for (size_t i = 0; i < result_elements; i++) {
-            result_wram[0][i] = 0;
-            result_wram[1][i] = 0;
         }
     }
     
