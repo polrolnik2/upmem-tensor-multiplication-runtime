@@ -31,7 +31,9 @@ all: build run
 
 build:
 	mkdir -p $(BIN_DIR); \
-	$(CC) $(CFLAGS) -g $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$name `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lpython3.7m -lnuma -lgomp 2>&1 | tee $(ROOT)/scratch/compile_logs/$$name.log; \
+	mkdir -p $(ROOT)/scratch/compile_logs; \
+	name=$$(basename $(FILE) .c); \
+	$(CC) $(CFLAGS) -g $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$name `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lgomp 2>&1 | tee $(ROOT)/scratch/compile_logs/$$name.log; \
 
 
 run:
@@ -40,7 +42,6 @@ run:
 		exit 1; \
 	fi; \
 	name=$$(basename $(FILE) .c); \
-	mkdir -p $(ROOT)/scratch/compile_logs; \
 	mkdir -p $(ROOT)/scratch/runtime_logs; \
 	echo "Running $(BIN_DIR)/$$name"; \
 	$(BIN_DIR)/$$name 2>&1 | tee $(ROOT)/scratch/runtime_logs/$$name.log

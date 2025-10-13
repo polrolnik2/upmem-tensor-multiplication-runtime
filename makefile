@@ -64,19 +64,13 @@ run-unittests: docker-build bin build-dpu
 	set -e; \
 	for t in $(UNITTEST_SRCS); do \
 	  echo "Building and running $$t"; \
-	  docker run --rm --platform linux/amd64 -v $(CURDIR):/workspace $(DOCKER_IMAGE) bash -c \
-		". /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator && \
-		. /workspace/source.me && \
-		make -C tests run FILE=$$(basename $$t) DEBUG=$(DEBUG) TIMER=$(TIMER)"; \
+	  make -C tests run FILE=$$(basename $$t) DEBUG=$(DEBUG) TIMER=$(TIMER); \
 	done; \
 	python3 scripts/parse_unittest_logs.py
 
 # Build DPU binaries
-build-dpu: docker-build bin
-	docker run --rm --platform linux/amd64 -v $(CURDIR):/workspace $(DOCKER_IMAGE) bash -c \
-		". /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator && \
-		. /workspace/source.me && \
-		dpu-upmem-dpurte-clang -O2 $(CFLAGS) -g -o /workspace/bin/matrix_multiply_dpu /workspace/src/dpu/pim_dpu_matrix_multiply.c -I src"
+build-dpu: bin
+	dpu-upmem-dpurte-clang -O2 $(CFLAGS) -g -o $(ROOT)/bin/matrix_multiply_dpu $(ROOT)/src/dpu/pim_dpu_matrix_multiply.c -I src
 
 # Documentation directories
 DOCS_DIR := docs
