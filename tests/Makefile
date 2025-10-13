@@ -27,6 +27,13 @@ ifeq ($(TIMER),1)
 CFLAGS += -DTIMER 
 endif
 
+all: build run
+
+build:
+	mkdir -p $(BIN_DIR); \
+	$(CC) $(CFLAGS) -g $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$name `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lpython3.7m -lnuma -lgomp 2>&1 | tee $(ROOT)/scratch/compile_logs/$$name.log; \
+
+
 run:
 	@if [ -z "$(FILE)" ]; then \
 		echo "Usage: make run FILE=yourtest.c"; \
@@ -35,7 +42,5 @@ run:
 	name=$$(basename $(FILE) .c); \
 	mkdir -p $(ROOT)/scratch/compile_logs; \
 	mkdir -p $(ROOT)/scratch/runtime_logs; \
-	mkdir -p $(BIN_DIR); \
-	$(CC) $(CFLAGS) -g $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$name `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lpython3.7m -lnuma -lgomp 2>&1 | tee $(ROOT)/scratch/compile_logs/$$name.log; \
 	echo "Running $(BIN_DIR)/$$name"; \
 	$(BIN_DIR)/$$name 2>&1 | tee $(ROOT)/scratch/runtime_logs/$$name.log
