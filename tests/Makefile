@@ -1,12 +1,3 @@
-# tests/Makefile
-# New usage with autocomplete support:
-#   make build-test_matrix_create_from_2d_array_and_free
-#   make run-test_matrix_create_from_2d_array_and_free
-#   make test_matrix_create_from_2d_array_and_free  (build and run)
-#
-# Legacy usage (still supported):
-#   make -C tests run FILE=matrix-op-unittests.c
-
 # Use project root from environment variable
 ROOT := $(PIM_MATMUL_BENCHMARKS_ROOT)
 
