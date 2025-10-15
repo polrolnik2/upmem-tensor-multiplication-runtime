@@ -86,4 +86,10 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
  */
 Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_frame_t* frame);
 
+/**
+ * @brief Free the resources associated with the PIM matrix multiplication frame.
+ * @param frame Pointer to the PIM matrix multiplication frame to free.
+ */
+void pim_matrix_multiplication_frame_free(pim_matrix_multiplication_frame_t* frame);
+
 #endif // __PIM_MATRIX_MULTIPLICATION_FRAME_H___

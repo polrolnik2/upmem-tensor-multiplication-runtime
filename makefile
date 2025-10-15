@@ -23,7 +23,7 @@ DEBUG ?= 0
 TIMER ?= 0
 
 # Use project root from environment variable
-ROOT ?= $(PIM_MATMUL_BENCHMARKS_ROOT)
+ROOT := $(PIM_MATMUL_BENCHMARKS_ROOT)
 
 # Helper to extract sources from YAML
 DEPS_YAML := $(ROOT)/defn/dependencies.yaml

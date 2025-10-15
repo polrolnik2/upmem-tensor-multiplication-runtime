@@ -27,6 +27,7 @@ Matrix*  dpu_multiply_matrices(Matrix* matrix1, Matrix* matrix2, uint32_t num_dp
         fprintf(stderr, "Result retrieval failed");
         return NULL;
     }
+    pim_matrix_multiplication_frame_free(frame);
     return result;
 }
 
