@@ -1,5 +1,11 @@
 # tests/Makefile
-# Usage: make -C tests run FILE=matrix-op-unittests.c
+# New usage with autocomplete support:
+#   make build-test_matrix_create_from_2d_array_and_free
+#   make run-test_matrix_create_from_2d_array_and_free
+#   make test_matrix_create_from_2d_array_and_free  (build and run)
+#
+# Legacy usage (still supported):
+#   make -C tests run FILE=matrix-op-unittests.c
 
 # Use project root from environment variable
 ROOT := $(PIM_MATMUL_BENCHMARKS_ROOT)
@@ -27,21 +33,56 @@ ifeq ($(TIMER),1)
 CFLAGS += -DTIMER 
 endif
 
-all: build run
+# Get all test source files
+TEST_SOURCES := $(wildcard test_*.c)
+TEST_NAMES := $(basename $(notdir $(TEST_SOURCES)))
 
-build:
-	mkdir -p $(BIN_DIR); \
-	mkdir -p $(ROOT)/scratch/compile_logs; \
-	name=$$(basename $(FILE) .c); \
-	$(CC) $(CFLAGS) -g $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$name `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lgomp 2>&1 | tee $(ROOT)/scratch/compile_logs/$$name.log; \
+# Generate phony targets for autocomplete
+.PHONY: help list-tests
 
+help:
+	@echo "Available test targets (with autocomplete):"
+	@echo "  make build-<test_name>  - Build a specific test"
+	@echo "  make run-<test_name>    - Run a specific test (must be built first)"
+	@echo "  make <test_name>        - Build and run a specific test"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make build-test_matrix_create_from_2d_array_and_free"
+	@echo "  make run-test_matrix_create_from_2d_array_and_free"
+	@echo "  make test_matrix_create_from_2d_array_and_free"
+	@echo ""
+	@echo "To list all available tests: make list-tests"
 
-run:
-	@if [ -z "$(FILE)" ]; then \
-		echo "Usage: make run FILE=yourtest.c"; \
+list-tests:
+	@echo "Available tests:"
+	@for test in $(sort $(TEST_NAMES)); do echo "  $$test"; done
+
+# Pattern rule: build-<test_name> - Build a specific test
+build-%: 
+	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(ROOT)/scratch/compile_logs
+	@echo "Building test: $*"
+	@test_file=""; \
+	if [ -f "$*.c" ]; then \
+		test_file="$*.c"; \
+	elif [ -f "individual/$*.c" ]; then \
+		test_file="individual/$*.c"; \
+	else \
+		echo "Error: Test file $*.c not found"; \
 		exit 1; \
 	fi; \
-	name=$$(basename $(FILE) .c); \
-	mkdir -p $(ROOT)/scratch/runtime_logs; \
-	echo "Running $(BIN_DIR)/$$name"; \
-	$(BIN_DIR)/$$name 2>&1 | tee $(ROOT)/scratch/runtime_logs/$$name.log
+	$(CC) $(CFLAGS) -g $$test_file $(DEPS_SRCS) -o $(BIN_DIR)/$* `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lgomp 2>&1 | tee $(ROOT)/scratch/compile_logs/$*.log
+
+# Pattern rule: run-<test_name> - Run a specific test
+run-%:
+	@mkdir -p $(ROOT)/scratch/runtime_logs
+	@if [ ! -f "$(BIN_DIR)/$*" ]; then \
+		echo "Error: Test binary $(BIN_DIR)/$* not found. Build it first with: make build-$*"; \
+		exit 1; \
+	fi
+	@echo "Running test: $*"
+	@$(BIN_DIR)/$* 2>&1 | tee $(ROOT)/scratch/runtime_logs/$*.log
+
+# Pattern rule: <test_name> - Build and run a specific test
+$(TEST_NAMES): %: build-% run-%
+	@echo "Completed: $@"

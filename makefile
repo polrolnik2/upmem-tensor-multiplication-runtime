@@ -64,7 +64,7 @@ run-unittests: bin build-dpu
 	set -e; \
 	for t in $(UNITTEST_SRCS); do \
 	  echo "Building and running $$t"; \
-	  make -C tests all FILE=$$(basename $$t) DEBUG=$(DEBUG) TIMER=$(TIMER); \
+	  make -C tests $$t DEBUG=$(DEBUG) TIMER=$(TIMER); \
 	done; \
 	python3 scripts/parse_unittest_logs.py
 
