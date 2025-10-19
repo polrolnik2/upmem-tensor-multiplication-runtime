@@ -174,6 +174,12 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
     curr_offset += result_size_aligned / frame->num_dpus;
     frame->mem_frame_end = curr_offset;
 
+    if (frame->mem_frame_end > 64 * 1024 * 1024) {
+        printf("Memory frame exceeds 64MB limit\n");
+        free(frame);
+        return NULL;
+    }
+
     frame->result_valid = false;
 
     const char* dpu_binary = "/workspace/bin/matrix_multiply_dpu";
