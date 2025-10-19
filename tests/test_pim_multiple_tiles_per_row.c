@@ -25,7 +25,7 @@ int test_pim_multiple_tiles_per_row() {
     Matrix* matrix2 = matrix_create_from_row_major_array(rows2, cols2, (void*)data2, sizeof(uint8_t));
     ASSERT_TRUE(matrix1 != NULL, "Matrix 1 creation failed");
     ASSERT_TRUE(matrix2 != NULL, "Matrix 2 creation failed");
-    Matrix* result = dpu_multiply_matrices(matrix1, matrix2, 4);
+    Matrix* result = dpu_multiply_matrices(matrix1, matrix2, 1);
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");

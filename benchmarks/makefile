@@ -24,14 +24,7 @@ CFLAGS += -DTIMER
 DOCKER ?= 0
 
 compile:
-ifeq ($(DOCKER),1)
-	docker run --rm --platform linux/amd64 -v $(ROOT):/workspace $(DOCKER_IMAGE) bash -c \
-		". /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator && \
-		. /workspace/source.me && \
-		$(CC) $(CFLAGS) -g $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$(basename $(FILE) .c) `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lpython3.7m -lnuma -lgomp"
-else
-	$(CC) $(CFLAGS) -g $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$(basename $(FILE) .c) `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lpython3.7m -lnuma -lgomp
-endif
+	$(CC) $(CFLAGS) $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$(basename $(FILE) .c) `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lpython3.7m -lnuma -lgomp
 
 docker-run:
 	docker run --rm --platform linux/amd64 -v $(ROOT):/workspace $(DOCKER_IMAGE) bash -c \
