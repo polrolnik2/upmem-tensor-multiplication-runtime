@@ -24,7 +24,7 @@ CFLAGS += -DTIMER
 DOCKER ?= 0
 
 compile:
-	$(CC) $(CFLAGS) $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$(basename $(FILE) .c) `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lpython3.7m -lnuma -lgomp
+	$(CC) $(CFLAGS) $(FILE) $(DEPS_SRCS) -o $(BIN_DIR)/$$(basename $(FILE) .c) `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lgomp
 
 docker-run:
 	docker run --rm --platform linux/amd64 -v $(ROOT):/workspace $(DOCKER_IMAGE) bash -c \

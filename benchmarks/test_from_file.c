@@ -71,7 +71,7 @@ static void usage(const char *prog) {
 
 int main(int argc, char **argv) {
 	if (argc < 3) { usage(argv[0]); return 2; }
-	const char *path = argv[1];
+	const char *pathA = argv[1];
 	const char *pathB = argv[2];
 	uint32_t num_dpus = 4; // default
 
