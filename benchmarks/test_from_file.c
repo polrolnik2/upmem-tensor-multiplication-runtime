@@ -10,6 +10,8 @@
 #include "dpu_multiply_matrices.h"
 #include "test_assertions.h"
 
+#include "timer.h"
+
 // Parse a text file with format:
 // rows cols\n
 // then rows*cols integers in row-major order separated by whitespace.
@@ -37,18 +39,37 @@ static Matrix* read_text_matrix_to_matrix(const char *path) {
 	}
 
 	uint64_t count = (uint64_t)rows * (uint64_t)cols;
-	uint8_t *buf = (uint8_t*)malloc(count * sizeof(uint8_t));
-	if (!buf) { fclose(f); return NULL; }
-	for (uint64_t i = 0; i < count; i++) {
-        long v;
-        if (fscanf(f, "%ld", &v) != 1) { free(buf); fclose(f); return NULL; }
-        if (v < 0) v = 0; if (v > 255) v = 255;
-        buf[i] = (uint8_t)v;
-    }
-    fclose(f);
-    Matrix *mat = matrix_create_from_row_major_array(rows, cols, buf, sizeof(uint8_t));
-    free(buf);
-    return mat;
+	if (elem_bytes == 1) {
+		uint8_t *buf = (uint8_t*)malloc(count * sizeof(uint8_t));
+		if (!buf) { fclose(f); return NULL; }
+		for (uint64_t i = 0; i < count; i++) {
+			long v;
+			if (fscanf(f, "%ld", &v) != 1) { free(buf); fclose(f); return NULL; }
+			if (v < 0) v = 0; if (v > 255) v = 255;
+			buf[i] = (uint8_t)v;
+		}
+		fclose(f);
+		Matrix *mat = matrix_create_from_row_major_array(rows, cols, buf, sizeof(uint8_t));
+		free(buf);
+		return mat;
+	} else if (elem_bytes == 2) {
+		uint16_t *buf = (uint16_t*)malloc(count * sizeof(uint16_t));
+		if (!buf) { fclose(f); return NULL; }
+		for (uint64_t i = 0; i < count; i++) {
+			long v;
+			if (fscanf(f, "%ld", &v) != 1) { free(buf); fclose(f); return NULL; }
+			if (v < 0) v = 0; if (v > 65535) v = 65535;
+			buf[i] = (uint16_t)v;
+		}
+		fclose(f);
+		Matrix *mat = matrix_create_from_row_major_array(rows, cols, buf, sizeof(uint16_t));
+		free(buf);
+		return mat;
+	} else {
+		fclose(f);
+		fprintf(stderr, "Unsupported element byte size: %u\n", elem_bytes);
+		return NULL;
+	}
 }
 
 static void print_u16_matrix(const Matrix *m, const char *label) {
@@ -64,18 +85,19 @@ static void print_u16_matrix(const Matrix *m, const char *label) {
 }
 
 static void usage(const char *prog) {
-	fprintf(stderr, "Usage: %s <matrixA.txt> <matrixB.txt> [--dpus N]\n", prog);
+	fprintf(stderr, "Usage: %s <matrixA.txt> <matrixB.txt> <reference_result.txt> [--dpus N]\n", prog);
 	fprintf(stderr, "  File format: first line 'rows cols', then rows*cols integers row-major.\n");
-	fprintf(stderr, "  Inputs are treated as uint8 (0..255). Result is uint16.\n");
+	fprintf(stderr, "  Inputs are treated as uint8 (0..255). Reference/result should be uint16 values.\n");
 }
 
 int main(int argc, char **argv) {
-	if (argc < 3) { usage(argv[0]); return 2; }
+	if (argc < 4) { usage(argv[0]); return 2; }
 	const char *pathA = argv[1];
 	const char *pathB = argv[2];
+	const char *pathRef = argv[3];
 	uint32_t num_dpus = 4; // default
 
-	for (int i = 3; i < argc; i++) {
+	for (int i = 4; i < argc; i++) {
 		if (strcmp(argv[i], "--dpus") == 0 && i + 1 < argc) {
 			num_dpus = (uint32_t)strtoul(argv[++i], NULL, 10);
 		} else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -103,31 +125,41 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	// Read reference matrix (expected result) from file (uint16 elements)
+	Matrix *ref = read_text_matrix_to_matrix(pathRef, 2);
+	if (!ref) {
+		fprintf(stderr, "Failed to read reference matrix from %s\n", pathRef);
+		matrix_free(A); matrix_free(B);
+		return 1;
+	}
+
+	// Basic dimensions for result
+	if (ref->rows != A->rows || ref->cols != B->cols) {
+		fprintf(stderr, "Reference dimensions mismatch: reference is %ux%u, expected %ux%u\n", ref->rows, ref->cols, A->rows, B->cols);
+		matrix_free(A); matrix_free(B); matrix_free(ref);
+		return 1;
+	}
+
 	// DPU multiplication
 	Matrix *dpu_res = dpu_multiply_matrices(A, B, num_dpus);
 	ASSERT_TRUE(dpu_res != NULL, "DPU multiply returned NULL");
 
-	// CPU multiplication for sanity
-	Matrix *cpu_res = host_multiply_matrices(A, B);
-	ASSERT_TRUE(cpu_res != NULL, "CPU multiply returned NULL");
-
-	// Compare results
-	if (!matrix_compare(dpu_res, cpu_res)) {
-		printf("[FAIL] DPU and CPU results differ.\n");
-		// Print small matrices to aid debugging
-		if (cpu_res->rows <= 16 && cpu_res->cols <= 16) {
-			print_u16_matrix(cpu_res, "CPU");
+	// Compare DPU result to reference
+	if (!matrix_compare(dpu_res, ref)) {
+		printf("[FAIL] DPU result differs from reference.\n");
+		if (ref->rows <= 16 && ref->cols <= 16) {
+			print_u16_matrix(ref, "REFERENCE");
 			print_u16_matrix(dpu_res, "DPU");
 		}
-		matrix_free(A); matrix_free(B); matrix_free(cpu_res); matrix_free(dpu_res);
+		matrix_free(A); matrix_free(B); matrix_free(ref); matrix_free(dpu_res);
 		return 1;
 	}
 
-	printf("[PASS] CPU and DPU results match for %ux%u x %ux%u using %u DPUs.\n", A->rows, A->cols, B->rows, B->cols, num_dpus);
+	printf("[PASS] DPU result matches reference for %ux%u x %ux%u using %u DPUs.\n", A->rows, A->cols, B->rows, B->cols, num_dpus);
 
 	matrix_free(A);
 	matrix_free(B);
-	matrix_free(cpu_res);
+	matrix_free(ref);
 	matrix_free(dpu_res);
 	return 0;
 }

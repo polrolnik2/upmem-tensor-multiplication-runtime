@@ -20,7 +20,7 @@ Matrix*  dpu_multiply_matrices(Matrix* matrix1, Matrix* matrix2, uint32_t num_dp
     pim_matrix_multiplication_frame_execute(frame);
     #ifdef TIMER
     stopTimer(&time);
-    printf("DPU multiplication time: %.3f ms\n", getElapsedTime(time));
+    printf("DPU multiplication time: %.3f s\n", getElapsedTime(time));
     #endif  
     Matrix* result = pim_matrix_multiplication_frame_get_result(frame);
     if (!result) {

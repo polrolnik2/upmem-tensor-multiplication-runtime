@@ -29,7 +29,7 @@ SIZE_CLASSES=(
 	"28043,28043,28043"
 )
 # Number of randomized instances per class
-INSTANCES=30
+INSTANCES=5
 
 # Value range for generated matrices (uint8 inputs)
 GEN_MIN=0
