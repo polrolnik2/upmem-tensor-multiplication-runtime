@@ -19,12 +19,13 @@ POSSIBLE_UPMEM_ENVS=(
 
 # Configuration: edit these arrays to define classes
 # DPU counts to test
-DPU_COUNTS=(25 100 225 400 625)
+DPU_COUNTS=(1 25 100 225 400 625)
 # Matrix size triplets: "M,K,N" means A is MxK, B is KxN
 SIZE_CLASSES=(
-	"12116,12116,12116"
-	"17736,17736,17736"
-	"21722,21722,21722"
+	"3965,3965,3965"
+	"11675,11675,11675"
+	"17438,17438,17438"
+	"21673,21673,21673"
 	"25082,25082,25082"
 	"28043,28043,28043"
 )
