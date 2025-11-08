@@ -62,7 +62,7 @@ build-%:
 		echo "Error: Test file $*.c not found"; \
 		exit 1; \
 	fi; \
-	$(CC) $(CFLAGS) -g $$test_file $(DEPS_SRCS) -o $(BIN_DIR)/$* `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lgomp 2>&1 | tee $(ROOT)/scratch/compile_logs/$*.log
+	$(CC) $(CFLAGS) -g $$test_file $(DEPS_SRCS) -o $(BIN_DIR)/$* `dpu-pkg-config --cflags --libs dpu` -lm -ldl -lelf -lgomp -lpython3.7m  -lnuma 2>&1 | tee $(ROOT)/scratch/compile_logs/$*.log
 
 # Pattern rule: run-<test_name> - Run a specific test
 run-%:

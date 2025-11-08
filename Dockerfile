@@ -31,12 +31,18 @@ ENV PKG_CONFIG_PATH="/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig"
 ENV PATH="/opt/upmem-2023.2.0-Linux-x86_64/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/upmem-2023.2.0-Linux-x86_64/lib"
 ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/opt/upmem-2023.2.0-Linux-x86_64/lib"
+RUN cat >> /etc/bash.bashrc <<'BASH'
+# Source UPMEM SDK in simulator mode if available
+if [ -f /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh ]; then
+    # shellcheck disable=SC1091
+    source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator
+fi
 
+# Source project environment if present
+if [ -f /workspace/source.me ]; then
+    # shellcheck disable=SC1091
+    source /workspace/source.me
+fi
+BASH
 SHELL ["/bin/bash", "-c"]
-
-# Source the upmem_env.sh script
-RUN source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator
-
-# Source the environment script
-RUN source /workspace/source.me
 

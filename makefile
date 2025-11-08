@@ -15,7 +15,7 @@ help:
 
 # Build the Docker image
 docker-build:
-	docker build -q --platform linux/amd64 -t $(DOCKER_IMAGE) .
+	docker build --platform linux/amd64 -t $(DOCKER_IMAGE) .
 
 CC ?= gcc
 
