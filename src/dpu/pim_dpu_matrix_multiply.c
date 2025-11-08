@@ -14,9 +14,9 @@ __host dpu_pim_matrix_multiply_kernel_arguments_t MATRIX_MULTIPLY_ARGUMENTS;
 __dma_aligned void* aux;
 
 // Dual ping-pong buffers for matrix tiles
-static __dma_aligned uint8_t* matrix1_wram[2];
-static __dma_aligned uint8_t* matrix2_wram[2];
-static __dma_aligned uint16_t* result_wram[2];
+static __dma_aligned int8_t* matrix1_wram[2];
+static __dma_aligned int8_t* matrix2_wram[2];
+static __dma_aligned int16_t* result_wram[2];
 
 static size_t matrix1_tile_size_bytes;
 static size_t matrix2_tile_size_bytes;
@@ -26,13 +26,13 @@ MUTEX_INIT(log_mutex);
 
 BARRIER_INIT(my_barrier, NR_TASKLETS);
 
-static inline void load_A_tile_from_mram(__mram_ptr void *src, uint8_t *dst, size_t bytes) {
+static inline void load_A_tile_from_mram(__mram_ptr void *src, int8_t *dst, size_t bytes) {
     for (size_t offset = 0; offset < bytes; offset += 2048) {
         mram_read(src + offset, dst + offset, (bytes - offset) < 2048 ? (bytes - offset) : 2048);
     }
 }
 
-static inline void load_B_tile_from_mram(__mram_ptr void *src, uint8_t *dst, size_t bytes) {
+static inline void load_B_tile_from_mram(__mram_ptr void *src, int8_t *dst, size_t bytes) {
     for (size_t offset = 0; offset < bytes; offset += 2048) {
         mram_read(src + offset, dst + offset, (bytes - offset) < 2048 ? (bytes - offset) : 2048);
     }
@@ -59,16 +59,16 @@ void compute_tile_tasklet(int tasklet_id, int n_tasklets,
     int row0 = effective_tasklet_id * rows_per_tasklet;
     int row_max = (row0 + rows_per_tasklet) < m_tile ? (row0 + rows_per_tasklet) : m_tile;
     
-    uint8_t* A_buf = matrix1_wram[input_buffer_idx];
-    uint8_t* B_buf = matrix2_wram[input_buffer_idx];
-    uint16_t* C_buf = result_wram[result_buffer_idx];
+    int8_t* A_buf = matrix1_wram[input_buffer_idx];
+    int8_t* B_buf = matrix2_wram[input_buffer_idx];
+    int16_t* C_buf = result_wram[result_buffer_idx];
 
     for (int i = row0; i < row_max; ++i) {
         for (int j = 0; j < n_tile; ++j) {
-            uint16_t sum = 0;
+            int16_t sum = 0;
             for (int kk = 0; kk < k_tile; ++kk) {
                 // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
-                sum += (uint8_t)A_buf[i * k_tile + kk] * (uint8_t)B_buf[j * k_tile + kk];
+                sum += (int8_t)A_buf[i * k_tile + kk] * (int8_t)B_buf[j * k_tile + kk];
             }
             C_buf[i * n_tile + j] += sum;
         }
@@ -94,12 +94,12 @@ int main() {
         matrix2_tile_size_bytes = MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols * MATRIX_MULTIPLY_ARGUMENTS.matrix2_type_size;
         result_tile_size_bytes = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols * MATRIX_MULTIPLY_ARGUMENTS.result_type_size;
 
-        matrix1_wram[0] = (uint8_t*)mem_alloc(matrix1_tile_size_bytes);
-        matrix2_wram[0] = (uint8_t*)mem_alloc(matrix2_tile_size_bytes);
-        result_wram[0] = (uint16_t*)mem_alloc(result_tile_size_bytes);
-        matrix1_wram[1] = (uint8_t*)mem_alloc(matrix1_tile_size_bytes);
-        matrix2_wram[1] = (uint8_t*)mem_alloc(matrix2_tile_size_bytes);
-        result_wram[1] = (uint16_t*)mem_alloc(result_tile_size_bytes);
+        matrix1_wram[0] = (int8_t*)mem_alloc(matrix1_tile_size_bytes);
+        matrix2_wram[0] = (int8_t*)mem_alloc(matrix2_tile_size_bytes);
+        result_wram[0] = (int16_t*)mem_alloc(result_tile_size_bytes);
+        matrix1_wram[1] = (int8_t*)mem_alloc(matrix1_tile_size_bytes);
+        matrix2_wram[1] = (int8_t*)mem_alloc(matrix2_tile_size_bytes);
+        result_wram[1] = (int16_t*)mem_alloc(result_tile_size_bytes);
         
         if (!matrix1_wram[0] || !matrix2_wram[0] || !result_wram[0] || 
             !matrix1_wram[1] || !matrix2_wram[1] || !result_wram[1]) {
@@ -120,14 +120,14 @@ int main() {
     }
     barrier_wait(&my_barrier);
 
-    uint16_t matrix1_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows;
-    uint16_t matrix1_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+    int16_t matrix1_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows;
+    int16_t matrix1_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
 
-    uint16_t matrix2_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
-    uint16_t matrix2_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols;
+    int16_t matrix2_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
+    int16_t matrix2_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols;
 
-    uint16_t result_tiles_rowwise = matrix1_tiles_rowwise;
-    uint16_t result_tiles_colwise = matrix2_tiles_colwise;
+    int16_t result_tiles_rowwise = matrix1_tiles_rowwise;
+    int16_t result_tiles_colwise = matrix2_tiles_colwise;
 
     #ifdef DEBUG
     if (pid == 0) {
