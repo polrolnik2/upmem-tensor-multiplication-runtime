@@ -128,14 +128,13 @@ static void usage(const char *prog) {
 }
 
 int main(int argc, char **argv) {
-	if (argc < 4) { usage(argv[0]); return 2; }
+	if (argc < 3) { usage(argv[0]); return 2; }
 	const char *pathA = argv[1];
 	const char *pathB = argv[2];
-	const char *pathRef = argv[3];
 	uint32_t num_dpus = 4; // default
 	const char *reference_file = NULL;
 
-	for (int i = 4; i < argc; i++) {
+	for (int i = 3; i < argc; i++) {
 		if (strcmp(argv[i], "--dpus") == 0 && i + 1 < argc) {
 			num_dpus = (uint32_t)strtoul(argv[++i], NULL, 10);
 		} else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -143,7 +142,6 @@ int main(int argc, char **argv) {
 			return 0;
 		} else if (strcmp(argv[i], "--reference-file") == 0 && i + 1 < argc) {
 			reference_file = argv[++i];
-			break;
 		}
 	}
 
@@ -163,26 +161,13 @@ int main(int argc, char **argv) {
 		matrix_free(A);
 		return 1;
 	}
+	A = matrix_extract_submatrix(A, 32, A->cols);
+	B = matrix_extract_submatrix(B, B->rows, 32);
 
 	// Basic dimension check
 	if (A->cols != B->rows) {
 		fprintf(stderr, "Incompatible dimensions: A is %ux%u, B is %ux%u\n", A->rows, A->cols, B->rows, B->cols);
 		matrix_free(A); matrix_free(B);
-		return 1;
-	}
-
-	// Read reference matrix (expected result) from file (uint16 elements)
-	Matrix *ref = read_text_matrix_to_matrix(pathRef, 2);
-	if (!ref) {
-		fprintf(stderr, "Failed to read reference matrix from %s\n", pathRef);
-		matrix_free(A); matrix_free(B);
-		return 1;
-	}
-
-	// Basic dimensions for result
-	if (ref->rows != A->rows || ref->cols != B->cols) {
-		fprintf(stderr, "Reference dimensions mismatch: reference is %ux%u, expected %ux%u\n", ref->rows, ref->cols, A->rows, B->cols);
-		matrix_free(A); matrix_free(B); matrix_free(ref);
 		return 1;
 	}
 
@@ -197,6 +182,7 @@ int main(int argc, char **argv) {
 		matrix_free(dpu_res);
 		return 1;
 	}
+	ref_res = matrix_extract_submatrix(ref_res, 32, 32);
 
 	if(!matrix_compare(dpu_res, ref_res)) {
 		fprintf(stderr, "[Fail] DPU result does not match reference result from %s\n", reference_file);

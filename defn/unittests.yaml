@@ -37,3 +37,4 @@ unittest:
   - test_pim_square_multi_tile_identity
   - test_pim_square_multi_tile
   - test_pim_multiple_tiles_per_row
+  - test_pim_square_negative_number_test
