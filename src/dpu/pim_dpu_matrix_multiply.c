@@ -22,6 +22,17 @@ static uint32_t matrix1_tile_size_bytes;
 static uint32_t matrix2_tile_size_bytes;
 static uint32_t result_tile_size_bytes;
 
+static uint32_t rows_per_tasklet;
+
+static uint32_t matrix1_tiles_rowwise;
+static uint32_t matrix1_tiles_colwise;
+static uint32_t matrix2_tiles_rowwise;
+static uint32_t matrix2_tiles_colwise;
+static uint32_t result_tiles_rowwise;
+static uint32_t result_tiles_colwise;
+
+uint32_t result_elements;
+
 MUTEX_INIT(log_mutex);
 
 BARRIER_INIT(my_barrier, NR_TASKLETS);
@@ -44,7 +55,7 @@ static inline void write_C_tile_to_mram(__dma_aligned void *src, __mram_ptr void
     }
 }
 
-void compute_tile_tasklet(uint32_t tasklet_id, uint32_t n_tasklets,
+void compute_tile_tasklet(uint32_t tasklet_id, uint32_t row_0, uint32_t row_max,
                           uint32_t m_tile, uint32_t n_tile, uint32_t k_tile,
                           uint32_t input_buffer_idx, uint32_t result_buffer_idx) {
     // Tasklet 0 doesn't compute, only tasklets 1 to n_tasklets-1 participate
@@ -52,18 +63,11 @@ void compute_tile_tasklet(uint32_t tasklet_id, uint32_t n_tasklets,
         return; // Tasklet 0 handles memory operations only
     }
     
-    uint32_t computing_tasklets = n_tasklets - 1; // Exclude tasklet 0
-    uint32_t effective_tasklet_id = tasklet_id - 1; // Adjust ID for computation (0-based for computing tasklets)
-    
-    uint32_t rows_per_tasklet = (m_tile + computing_tasklets - 1) / computing_tasklets;
-    uint32_t row0 = effective_tasklet_id * rows_per_tasklet;
-    uint32_t row_max = (row0 + rows_per_tasklet) < m_tile ? (row0 + rows_per_tasklet) : m_tile;
-    
     int8_t* A_buf = matrix1_wram[input_buffer_idx];
     int8_t* B_buf = matrix2_wram[input_buffer_idx];
     int16_t* C_buf = result_wram[result_buffer_idx];
 
-    for (int i = row0; i < row_max; ++i) {
+    for (int i = row_0; i < row_max; ++i) {
         for (int j = 0; j < n_tile; ++j) {
             int16_t sum = 0;
             for (int kk = 0; kk < k_tile; ++kk) {
@@ -106,71 +110,70 @@ int main() {
             printf("[DPU %d] ERROR: Failed to allocate memory for matrix buffers\n", pid);
             return -1;
         }
-    }
-    
-    barrier_wait(&my_barrier);
 
-    if (pid == 0) {
+        rows_per_tasklet = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows / (NR_TASKLETS - 1);
+
+        matrix1_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows;
+        matrix1_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+
+        matrix2_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
+        matrix2_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols;
+
+        result_tiles_rowwise = matrix1_tiles_rowwise;
+        result_tiles_colwise = matrix2_tiles_colwise;
+
         if (MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows == 0 || MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols == 0 ||
             MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows == 0 || MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols == 0 ||
             MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows == 0 || MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols == 0) {
             printf("[DPU %d] ERROR: Division by zero detected in tile size or matrix dimension arguments\n", pid);
             return -3;
         }
-    }
-    barrier_wait(&my_barrier);
-
-    uint32_t matrix1_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows;
-    uint32_t matrix1_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
-
-    uint32_t matrix2_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
-    uint32_t matrix2_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix2_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols;
-
-    uint32_t result_tiles_rowwise = matrix1_tiles_rowwise;
-    uint32_t result_tiles_colwise = matrix2_tiles_colwise;
-
-    #ifdef DEBUG
-    if (pid == 0) {
+        #ifdef DEBUG
         printf("[DPU %d] Tile dimensions debug:\n", pid);
         printf("[DPU %d]   matrix1_tile_rows=%d, matrix1_tile_cols=%d (size=%zu bytes)\n", 
-               pid, MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols, matrix1_tile_size_bytes);
+            pid, MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols, matrix1_tile_size_bytes);
         printf("[DPU %d]   matrix2_tile_rows=%d, matrix2_tile_cols=%d (size=%zu bytes)\n", 
-               pid, MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols, matrix2_tile_size_bytes);
+            pid, MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_cols, matrix2_tile_size_bytes);
         printf("[DPU %d]   result_tile_rows=%d, result_tile_cols=%d (size=%zu bytes)\n", 
-               pid, MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, result_tile_size_bytes);
+            pid, MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, result_tile_size_bytes);
         printf("[DPU %d]   Calculated tiles: A=%dx%d, B=%dx%d, C=%dx%d\n", 
-               pid, matrix1_tiles_rowwise, matrix1_tiles_colwise, 
-               matrix2_tiles_rowwise, matrix2_tiles_colwise,
-               result_tiles_rowwise, result_tiles_colwise);
+            pid, matrix1_tiles_rowwise, matrix1_tiles_colwise, 
+            matrix2_tiles_rowwise, matrix2_tiles_colwise,
+            result_tiles_rowwise, result_tiles_colwise);
+        #endif
+
+        if (MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols != MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows) {
+            printf("[DPU %d] ERROR: Matrix tile dimensions mismatch: A_cols=%d, B_rows=%d\n", 
+                pid, MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols, MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows);
+            return -1;
+        }
+
+        #ifdef DEBUG
+        printf("[DPU %d] Matrix dimensions: A=%dx%d, B=%dx%d, C=%dx%d\n", 
+            pid, MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols,
+            MATRIX_MULTIPLY_ARGUMENTS.matrix2_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix2_cols,
+            MATRIX_MULTIPLY_ARGUMENTS.result_rows, MATRIX_MULTIPLY_ARGUMENTS.result_cols);
+        printf("[DPU %d] Result tiles: %dx%d, Starting ping-pong buffer computation\n", 
+            pid, result_tiles_rowwise, result_tiles_colwise);
+        #endif
+        
+        result_elements = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
     }
-    #endif
+
+    uint32_t row_0;
+    uint32_t row_max;
+
+    if (pid != 0) {
+        row_0 = (pid - 1) * rows_per_tasklet;
+        row_max = (pid == NR_TASKLETS - 1) ? MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows : row_0 + rows_per_tasklet;
+    }
 
     barrier_wait(&my_barrier);
-
-    if (MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols != MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows) {
-        if (pid == 0) {
-            printf("[DPU %d] ERROR: Matrix tile dimensions mismatch: A_cols=%d, B_rows=%d\n", 
-                   pid, MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols, MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows);
-        }
-        return -1;
-    }
-
-#ifdef DEBUG
-    if (pid == 0) {
-        printf("[DPU %d] Matrix dimensions: A=%dx%d, B=%dx%d, C=%dx%d\n", 
-               pid, MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols,
-               MATRIX_MULTIPLY_ARGUMENTS.matrix2_rows, MATRIX_MULTIPLY_ARGUMENTS.matrix2_cols,
-               MATRIX_MULTIPLY_ARGUMENTS.result_rows, MATRIX_MULTIPLY_ARGUMENTS.result_cols);
-        printf("[DPU %d] Result tiles: %dx%d, Starting ping-pong buffer computation\n", 
-               pid, result_tiles_rowwise, result_tiles_colwise);
-    }
-#endif
-
+    
     // Ping-pong buffer implementation with separate result buffer management
     int input_compute_buffer = 0;
     int input_load_buffer = 1;
     int result_buffer = 0;  // Result buffer switches only when we finish a complete result tile
-    uint32_t result_elements = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
     bool first_iteration = true;
     
     for (int i = 0; i < result_tiles_rowwise; i++) {
@@ -220,7 +223,7 @@ int main() {
                 
                 // All threads except tasklet 0: Compute on input_compute_buffer, accumulate into result_buffer
                 if (!first_iteration && pid != 0) {
-                    compute_tile_tasklet(pid, NR_TASKLETS, 
+                    compute_tile_tasklet(pid, row_0, row_max,
                                        MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, 
                                        MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, 
                                        MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
@@ -242,7 +245,7 @@ int main() {
             
             // Final computation for the last K iteration
             if (pid != 0) {
-                compute_tile_tasklet(pid, NR_TASKLETS, 
+                compute_tile_tasklet(pid, row_0, row_max,
                                    MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, 
                                    MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, 
                                    MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
