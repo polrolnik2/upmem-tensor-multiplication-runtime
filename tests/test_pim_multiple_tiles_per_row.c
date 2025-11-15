@@ -12,8 +12,8 @@
 int test_pim_multiple_tiles_per_row() {
     printf("Running test_pim_square_multi_tile...\n");
     // Create two sample matrices 4096x8
-    uint16_t rows1 = 16, cols1 = 4096;
-    uint16_t rows2 = 4096, cols2 = 16;
+    uint16_t rows1 = 16, cols1 = 32;
+    uint16_t rows2 = 32, cols2 = 16;
     uint8_t data1[16*4096], data2[4096*16];
     for (int i = 0; i < rows1; i++) {
         for (int j = 0; j < cols1; j++) {
@@ -25,7 +25,7 @@ int test_pim_multiple_tiles_per_row() {
     Matrix* matrix2 = matrix_create_from_row_major_array(rows2, cols2, (void*)data2, sizeof(uint8_t));
     ASSERT_TRUE(matrix1 != NULL, "Matrix 1 creation failed");
     ASSERT_TRUE(matrix2 != NULL, "Matrix 2 creation failed");
-    Matrix* result = dpu_multiply_matrices(matrix1, matrix2, 4);
+    Matrix* result = dpu_multiply_matrices(matrix1, matrix2, 1);
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");

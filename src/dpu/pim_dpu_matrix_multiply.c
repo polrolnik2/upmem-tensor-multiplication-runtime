@@ -207,8 +207,10 @@ int main() {
                     load_A_tile_from_mram(mram_addr_A, matrix1_wram[input_load_buffer], 
                                          matrix1_tile_size_bytes);
                     __mram_ptr void *mram_addr_B = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER + 
-                        (k * matrix2_tiles_colwise + j) * matrix2_tile_size_bytes);
+                        (j * matrix2_tiles_rowwise + k) * matrix2_tile_size_bytes);
 #ifdef DEBUG
+                    printf("[DPU %d] Loading A tile for [%d,%d] from MRAM addr:%p to input buffer %d\n", 
+                           pid, i, k, mram_addr_A, input_load_buffer);
                     printf("[DPU %d] Loading B tile for [%d,%d] from MRAM addr:%p to input buffer %d\n", 
                            pid, k, j, mram_addr_B, input_load_buffer);
 #endif
