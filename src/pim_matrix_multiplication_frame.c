@@ -15,13 +15,13 @@
 
 #include "pim_matrix_multiplication_frame.h"
 
-uint32_t calculate_pad_rows(int32_t_t rows, int32_t_t element_size) {
+uint32_t calculate_pad_rows(uint32_t rows, uint32_t element_size) {
     uint32_t col_size = rows * element_size;
     uint32_t pad = (8 - (col_size % 8)) % 8;
     return pad / element_size;
 }
 
-uint32_t calculate_pad_cols(int32_t_t cols, int32_t_t element_size) {
+uint32_t calculate_pad_cols(uint32_t cols, uint32_t element_size) {
     uint32_t row_size = cols * element_size;
     uint32_t pad = (8 - (row_size % 8)) % 8;
     return pad / element_size;
@@ -41,8 +41,8 @@ uint32_t get_result_tile_size_bytes(const pim_matrix_multiplication_frame_t* fra
 
 Matrix * matrix_align(const Matrix *mat) {
     if (!mat) return NULL;
-    int32_t_t pad_rows = calculate_pad_rows(mat->rows, mat->element_size);
-    int32_t_t pad_cols = calculate_pad_cols(mat->cols, mat->element_size);
+    int32_t pad_rows = calculate_pad_rows(mat->rows, mat->element_size);
+    int32_t pad_cols = calculate_pad_cols(mat->cols, mat->element_size);
     Matrix *aligned = matrix_add_cols(mat, pad_cols, NULL);
     if (!aligned) {
         return NULL;
