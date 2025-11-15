@@ -31,7 +31,7 @@ static uint32_t matrix2_tiles_colwise;
 static uint32_t result_tiles_rowwise;
 static uint32_t result_tiles_colwise;
 
-uint32_t result_elements;
+static uint32_t result_elements;
 
 MUTEX_INIT(log_mutex);
 
@@ -111,7 +111,7 @@ int main() {
             return -1;
         }
 
-        rows_per_tasklet = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows / (NR_TASKLETS - 1);
+        rows_per_tasklet = (MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows + NR_TASKLETS - 2) / (NR_TASKLETS - 1);
 
         matrix1_tiles_rowwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_rows / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_rows;
         matrix1_tiles_colwise = MATRIX_MULTIPLY_ARGUMENTS.matrix1_cols / MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
@@ -128,6 +128,7 @@ int main() {
             printf("[DPU %d] ERROR: Division by zero detected in tile size or matrix dimension arguments\n", pid);
             return -3;
         }
+
         #ifdef DEBUG
         printf("[DPU %d] Tile dimensions debug:\n", pid);
         printf("[DPU %d]   matrix1_tile_rows=%d, matrix1_tile_cols=%d (size=%zu bytes)\n", 
@@ -163,12 +164,15 @@ int main() {
     uint32_t row_0;
     uint32_t row_max;
 
+    barrier_wait(&my_barrier);
+
     if (pid != 0) {
         row_0 = (pid - 1) * rows_per_tasklet;
-        row_max = (pid == NR_TASKLETS - 1) ? MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows : row_0 + rows_per_tasklet;
+        row_max = (row_0 + rows_per_tasklet) < MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows ? (row_0 + rows_per_tasklet) : MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
     }
 
     barrier_wait(&my_barrier);
+
     
     // Ping-pong buffer implementation with separate result buffer management
     int input_compute_buffer = 0;
