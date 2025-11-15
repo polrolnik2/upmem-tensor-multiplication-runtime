@@ -259,6 +259,10 @@ void pim_matrix_multiplication_frame_load_first_matrix(pim_matrix_multiplication
     uint32_t num_row_tiles = (matrix_rows + frame->matrix1_tile_rows - 1) / frame->matrix1_tile_rows;
     uint32_t num_col_tiles = (matrix_cols + frame->matrix1_tile_cols - 1) / frame->matrix1_tile_cols;
     uint32_t submatrix_size = num_row_tiles * num_col_tiles * frame->matrix1_tile_rows * frame->matrix1_tile_cols * frame->matrix1_type_size;
+    #ifdef DEBUG
+    printf("Loading first matrix submatrix size: %u bytes\n", submatrix_size);
+    printf("Rows: %u, Cols: %u, Num Row Tiles: %u, Num Col Tiles: %u\n", matrix_rows, matrix_cols, num_row_tiles, num_col_tiles);
+    #endif // DEBUG
     DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, DPU_MRAM_HEAP_POINTER_NAME, offset, submatrix_size, DPU_XFER_DEFAULT));
     frame->result_valid = false; // Reset result validity after loading new matrix
 
@@ -342,6 +346,10 @@ void pim_matrix_multiplication_frame_load_second_matrix(pim_matrix_multiplicatio
     uint32_t num_row_tiles = (matrix_rows + frame->matrix2_tile_cols - 1) / frame->matrix2_tile_cols;  // Note: using tile_cols for rows
     uint32_t num_col_tiles = (matrix_cols + frame->matrix2_tile_rows - 1) / frame->matrix2_tile_rows;  // Note: using tile_rows for cols
     uint32_t submatrix_size = num_row_tiles * num_col_tiles * frame->matrix2_tile_rows * frame->matrix2_tile_cols * frame->matrix2_type_size;
+    #ifdef DEBUG
+    printf("Loading first matrix submatrix size: %u bytes\n", submatrix_size);
+    printf("Rows: %u, Cols: %u, Num Row Tiles: %u, Num Col Tiles: %u\n", matrix_rows, matrix_cols, num_row_tiles, num_col_tiles);
+    #endif // DEBUG
     DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, DPU_MRAM_HEAP_POINTER_NAME, offset, submatrix_size, DPU_XFER_DEFAULT));
     frame->result_valid = false; // Reset result validity after loading new matrix
 
@@ -390,6 +398,21 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.matrix2_tile_cols = frame->matrix2_tile_cols;
     input_args.result_tile_rows = frame->result_tile_rows;
     input_args.result_tile_cols = frame->result_tile_cols;
+
+    #ifdef DEBUG
+    printf("Executing PIM matrix multiplication with parameters:\n");
+    printf("Matrix1 Start Offset: %u, Matrix2 Start Offset: %u, Result Start Offset: %u\n",
+           input_args.matrix1_start_offset, input_args.matrix2_start_offset, input_args.result_start_offset);
+    printf("Matrix1 Rows: %u, Matrix1 Cols: %u\n", input_args.matrix1_rows, input_args.matrix1_cols);
+    printf("Matrix2 Rows: %u, Matrix2 Cols: %u\n", input_args.matrix2_rows, input_args.matrix2_cols);
+    printf("Result Rows: %u, Result Cols: %u\n", input_args.result_rows, input_args.result_cols);
+    printf("Matrix1 Type Size: %u, Matrix2 Type Size: %u, Result Type Size: %u\n",
+           input_args.matrix1_type_size, input_args.matrix2_type_size, input_args.result_type_size);
+    printf("Matrix1 Tile: %ux%u, Matrix2 Tile: %ux%u, Result Tile: %ux%u\n",
+           input_args.matrix1_tile_rows, input_args.matrix1_tile_cols,
+           input_args.matrix2_tile_rows, input_args.matrix2_tile_cols,
+           input_args.result_tile_rows, input_args.result_tile_cols);
+    #endif // DEBUG
 
     DPU_FOREACH(frame->dpu_set, dpu) {
         DPU_ASSERT(dpu_prepare_xfer(dpu, &input_args));
@@ -532,6 +555,10 @@ Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_fr
             }
             matrix_free(submatrices[i][j]);
             submatrices[i][j] = extracted;
+            #ifdef DEBUG
+            printf("Retrieved submatrix (%u, %u):\n", i, j);
+            matrix_print(submatrices[i][j], "| %d |");
+            #endif // DEBUG
         }
         
         row_submatrices[i] = matrix_join_by_cols(submatrices[i], result_submatrices_by_cols);
