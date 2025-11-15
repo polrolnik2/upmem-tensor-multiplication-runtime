@@ -150,6 +150,8 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	printf("Running DPU matrix multiplication test with %u DPUs\n", num_dpus);
+
 	Matrix *A = read_text_matrix_to_matrix(pathA);
 	if (!A) {
 		fprintf(stderr, "Failed to read matrix A from %s\n", pathA);
@@ -161,8 +163,6 @@ int main(int argc, char **argv) {
 		matrix_free(A);
 		return 1;
 	}
-	A = matrix_extract_submatrix(A, 32, A->cols);
-	B = matrix_extract_submatrix(B, B->rows, 32);
 
 	// Basic dimension check
 	if (A->cols != B->rows) {
@@ -182,7 +182,6 @@ int main(int argc, char **argv) {
 		matrix_free(dpu_res);
 		return 1;
 	}
-	ref_res = matrix_extract_submatrix(ref_res, 32, 32);
 
 	if(!matrix_compare(dpu_res, ref_res)) {
 		fprintf(stderr, "[Fail] DPU result does not match reference result from %s\n", reference_file);
