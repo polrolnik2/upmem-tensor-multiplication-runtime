@@ -12,9 +12,9 @@
 int test_pim_multiple_tiles_per_row() {
     printf("Running test_pim_square_multi_tile...\n");
     // Create two sample matrices 4096x8
-    uint16_t rows1 = 16, cols1 = 32;
-    uint16_t rows2 = 32, cols2 = 16;
-    uint8_t data1[16*4096], data2[4096*16];
+    uint16_t rows1 = 128, cols1 = 256;
+    uint16_t rows2 = 256, cols2 = 128;
+    uint8_t data1[128*256], data2[256*128];
     for (int i = 0; i < rows1; i++) {
         for (int j = 0; j < cols1; j++) {
             data1[i*cols1 + j] = (i+j) % 256; // Sample data for matrix 1
