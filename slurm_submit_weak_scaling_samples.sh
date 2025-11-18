@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="/mnt/storage_3/home/pawel.polrolniczak/pl0576-01/project_data/pim-matmul-benchmarks"
+REPO_ROOT="/home/inf164175/workspace/pim-matmul-benchmarks"
 JOB_SCRIPT="$REPO_ROOT/slurm_weak_scaling_samples.sh"
 
 # Defaults (mirrors DEFAULT_SIZES in the Python script)
@@ -104,7 +104,7 @@ for triplet in "${SIZES[@]}"; do
     fi
 
     echo "Submitting job $((job_index+1)): M=$M K=$K N=$N seedA=$SEEDA"
-    sbatch "${args[@]}" "$JOB_SCRIPT"
+    sbatch -p hgx "${args[@]}" "$JOB_SCRIPT"
     submit_count=$((submit_count+1))
     job_index=$((job_index+1))
   done

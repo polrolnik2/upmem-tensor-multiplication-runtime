@@ -106,9 +106,16 @@ def main():
 	end_time = time.time()
 
 	# write to file
-	print(f"MP dot() took: {end_time - start_time:.4f}s")
+	time_path = args.output + ".time"
+	try:
+		with open(time_path, 'w') as tf:
+			tf.write(f"MP dot() took: {end_time - start_time:.4f}s\n")
+	except Exception as e:
+		print(f"Failed to write time file {time_path}: {e}", file=sys.stderr)
 
-	# write to file
+	# load the matrix back from GPU to host before writing
+	cp.cuda.Device().synchronize()
+	result = cp.asnumpy(result)
 	write_matrix_text(args.output, result)
 	print(f"Reference matrix written to {args.output} (shape {result.shape}, dtype {result.dtype})")
 

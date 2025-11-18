@@ -30,7 +30,7 @@ for class_dir in "$REF_DIR"/*; do
         mkdir -p "$REF_DIR/results/$(basename "$class_dir")/pair_$((i + 1))"
         ln -f "${A_files[i]}" "$REF_DIR/results/$(basename "$class_dir")/pair_$((i + 1))/A_matrix.txt"
         ln -f "${B_files[i]}" "$REF_DIR/results/$(basename "$class_dir")/pair_$((i + 1))/B_matrix.txt"
-        sbatch slurm_generate_references.sh \
+        sbatch -p hgx slurm_generate_references.sh \
             "$REF_DIR/results/$(basename "$class_dir")/pair_$((i + 1))/A_matrix.txt" \
             "$REF_DIR/results/$(basename "$class_dir")/pair_$((i + 1))/B_matrix.txt" \
             "$REF_DIR/results/$(basename "$class_dir")/pair_$((i + 1))/Q.txt"
