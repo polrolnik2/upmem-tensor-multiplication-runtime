@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "test_assertions.h"
+#include <math.h>
 
 #include "matrix.h"
 #include "pim_matrix_multiplication_frame.h"
@@ -9,23 +10,22 @@
 #include "host_multiply_matrices.h"
 #include "dpu_multiply_matrices.h"
 
-int test_pim_multiple_tiles_per_row() {
-    printf("Running test_pim_square_multi_tile...\n");
-    // Create two sample matrices 4096x8
-    uint16_t rows1 = 128, cols1 = 256;
-    uint16_t rows2 = 256, cols2 = 128;
-    uint8_t data1[128*256], data2[256*128];
-    for (int i = 0; i < rows1; i++) {
-        for (int j = 0; j < cols1; j++) {
-            data1[i*cols1 + j] = (i+j) % 256; // Sample data for matrix 1
-            data2[j*cols2 + i] = (255 - (i+j)) % 256; // Sample data for matrix 2
+int test_pim_square_negative_number_test() {
+    printf("Running test_pim_square_negative_number_test...\n");
+    // Create two sample matrices 16x16
+    uint16_t rows = 16, cols = 16;
+    int8_t data1[16*16], data2[16*16];
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            data1[i*cols + j] = (i+j) * (pow(-1, i+j));
+            data2[i*cols + j] = i+j; 
         }
     }
-    Matrix* matrix1 = matrix_create_from_row_major_array(rows1, cols1, (void*)data1, sizeof(uint8_t));
-    Matrix* matrix2 = matrix_create_from_row_major_array(rows2, cols2, (void*)data2, sizeof(uint8_t));
+    Matrix* matrix1 = matrix_create_from_row_major_array(rows, cols, (void*)data1, sizeof(int8_t));
+    Matrix* matrix2 = matrix_create_from_row_major_array(rows, cols, (void*)data2, sizeof(int8_t));
     ASSERT_TRUE(matrix1 != NULL, "Matrix 1 creation failed");
     ASSERT_TRUE(matrix2 != NULL, "Matrix 2 creation failed");
-    Matrix* result = dpu_multiply_matrices(matrix1, matrix2, 1);
+    Matrix* result = dpu_multiply_matrices(matrix1, matrix2, 2);
     ASSERT_TRUE(result != NULL, "Result matrix should not be NULL");
     Matrix* expected_result = host_multiply_matrices(matrix1, matrix2);
     ASSERT_TRUE(expected_result != NULL, "Expected result matrix should not be NULL");
@@ -59,12 +59,12 @@ int test_pim_multiple_tiles_per_row() {
 }
 
 int main() {
-    int result = test_pim_multiple_tiles_per_row();
+    int result = test_pim_square_negative_number_test();
     if (result == 0) {
-        printf("[PASS] test_pim_multiple_tiles_per_row passed!\n");
+        printf("[PASS] test_pim_square_negative_number_test passed!\n");
         return 0;
     } else {
-        printf("[FAIL] test_pim_multiple_tiles_per_row failed!\n");
+        printf("[FAIL] test_pim_square_negative_number_test failed!\n");
         return 1;
     }
 }
