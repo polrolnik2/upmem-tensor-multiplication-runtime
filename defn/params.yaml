@@ -1,5 +1,5 @@
 
 runtime_params:
   - NR_TASKLETS: 16
-  - TILE_SIZE: 4096
+  - TILE_SIZE: 648
   - DPU_MATRIX_MULTIPLICATION_BIN: '"${PIM_MATMUL_BENCHMARKS_ROOT}/bin/matrix_multiply_dpu"'
