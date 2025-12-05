@@ -60,9 +60,9 @@ void compute_tile(int8_t* A_buf, int8_t* B_buf, int16_t* C_buf,
             int16_t sum = 0;
             for (uint32_t kk = 0; kk < k_tile; ++kk) {
                 // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
-                sum += (int16_t)A_buf[i * k_tile + kk] * (int16_t)B_buf[j * k_tile + kk];
+                sum += (int16_t)A_buf[i * MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols + kk] * (int16_t)B_buf[j * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows + kk];
             }
-            C_buf[i * n_tile + j] += sum;
+            C_buf[i * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols + j] += sum;
         }
     }
 }
@@ -145,6 +145,19 @@ int main() {
 
     barrier_wait(&my_barrier);
 
+    // Calculate effective dimensions for outermost tiles (only computed once)
+    // Last row tile may have padding
+    uint32_t last_row_tile_m = MATRIX_MULTIPLY_ARGUMENTS.matrix1_original_rows % MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
+    if (last_row_tile_m == 0) last_row_tile_m = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
+    
+    // Last column tile may have padding
+    uint32_t last_col_tile_n = MATRIX_MULTIPLY_ARGUMENTS.matrix2_original_cols % MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+    if (last_col_tile_n == 0) last_col_tile_n = MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+    
+    // Last k tile may have padding
+    uint32_t last_k_tile_k = MATRIX_MULTIPLY_ARGUMENTS.matrix1_original_cols % MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+    if (last_k_tile_k == 0) last_k_tile_k = MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+
     // Calculate total number of result tiles and partition among tasklets
     uint32_t total_result_tiles = result_tiles_rowwise * result_tiles_colwise;
     uint32_t tiles_per_tasklet = (total_result_tiles + NR_TASKLETS - 1) / NR_TASKLETS;
@@ -172,6 +185,10 @@ int main() {
             result_wram[pid][idx] = 0;
         }
 
+        // Determine effective m and n for this tile (check if it's an outermost tile)
+        uint32_t effective_m = (i == result_tiles_rowwise - 1) ? last_row_tile_m : MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
+        uint32_t effective_n = (j == result_tiles_colwise - 1) ? last_col_tile_n : MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+
         // Accumulate across all K iterations for this result tile
         for (uint32_t k = 0; k < matrix1_tiles_colwise; k++) {
             #ifdef DEBUG
@@ -191,11 +208,14 @@ int main() {
                 (j * matrix2_tiles_rowwise + k) * matrix2_tile_size_bytes);
             load_B_tile_from_mram(mram_addr_B, matrix2_wram[pid], matrix2_tile_size_bytes);
 
+            // Determine effective k for this iteration (check if it's the last k tile)
+            uint32_t effective_k = (k == matrix1_tiles_colwise - 1) ? last_k_tile_k : MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+
             // Compute: C[i,j] += A[i,k] * B[k,j]
             compute_tile(matrix1_wram[pid], matrix2_wram[pid], result_wram[pid],
-                        MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows,
-                        MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols,
-                        MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols);
+                         effective_m,
+                         effective_n,
+                         effective_k);
         }
 
         // Write completed result tile back to MRAM
