@@ -55,25 +55,15 @@ static inline void write_C_tile_to_mram(__dma_aligned void *src, __mram_ptr void
 
 void compute_tile(int8_t* A_buf, int8_t* B_buf, int16_t* C_buf,
                   uint32_t m_tile, uint32_t n_tile, uint32_t k_tile) {
-    uint32_t index_a, index_b, index_c;
-    index_a = 0;
-    index_c = 0;
     for (uint32_t i = 0; i < m_tile; ++i) {
-        index_b = 0;
         for (uint32_t j = 0; j < n_tile; ++j) {
             int16_t sum = 0;
             for (uint32_t kk = 0; kk < k_tile; ++kk) {
                 // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
                 sum += (int16_t)A_buf[i * MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols + kk] * (int16_t)B_buf[j * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows + kk];
-                index_a++;
-                index_b++;
             }
             C_buf[i * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols + j] += sum;
-            index_c++;
-            index_b += MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows - k_tile;;
         }
-        index_a += MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols - k_tile;
-        index_c += MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols - n_tile;
     }
 }
 
