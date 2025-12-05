@@ -184,7 +184,7 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
 
     frame->result_valid = false;
 
-    const char* dpu_binary = "/workspace/bin/matrix_multiply_dpu";
+    const char* dpu_binary = "/home/unipoznan/workspace/pim-matmul-benchmarks/bin/matrix_multiply_dpu";
     DPU_ASSERT(dpu_load(frame->dpu_set, dpu_binary, NULL));
 
     return frame;
