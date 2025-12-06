@@ -184,12 +184,11 @@ int main() {
     __mram_ptr void * c_address = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.result_start_offset + DPU_MRAM_HEAP_POINTER +
         (my_tile_start * result_tile_size_bytes));
 
+    uint32_t i = i_start;
+    uint32_t j = j_start;
+
 
     for (uint32_t tile_idx = my_tile_start; tile_idx < my_tile_end; tile_idx++) {
-        // Convert linear tile index to 2D coordinates
-        uint32_t i = tile_idx / result_tiles_colwise;  // row index
-        uint32_t j = tile_idx % result_tiles_colwise;  // col index
-
         if (i == i_start && tile_idx != my_tile_start)
             a_address = a_address_start;
         if (j == j_start)
@@ -238,6 +237,13 @@ int main() {
         write_C_tile_to_mram(result_wram[pid], c_address, result_tile_size_bytes);
 
         c_address = (__mram_ptr void *)(c_address + result_tile_size_bytes);
+
+        j++;
+        if (j >= result_tiles_colwise) {
+            j = j_start;
+            i++;
+        }
+        
 
         #ifdef DEBUG
         printf("[Tasklet %d] Completed and wrote back result tile [%d,%d]\n", pid, i, j);
