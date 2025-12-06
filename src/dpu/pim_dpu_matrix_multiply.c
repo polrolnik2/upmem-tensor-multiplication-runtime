@@ -55,15 +55,29 @@ static inline void write_C_tile_to_mram(__dma_aligned void *src, __mram_ptr void
 
 void compute_tile(int8_t* A_buf, int8_t* B_buf, int16_t* C_buf,
                   uint32_t m_tile, uint32_t n_tile, uint32_t k_tile) {
+    uint32_t a_addr, b_addr, c_addr;
+    uint32_t a_row_start = 0;
+    uint32_t b_col_start = 0;
+    uint32_t c_row_start = 0;
     for (uint32_t i = 0; i < m_tile; ++i) {
+        c_addr = c_row_start;
         for (uint32_t j = 0; j < n_tile; ++j) {
+            a_addr = a_row_start;   
+            b_addr = b_col_start;
             int16_t sum = 0;
             for (uint32_t kk = 0; kk < k_tile; ++kk) {
                 // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
-                sum += (int16_t)A_buf[i * MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols + kk] * (int16_t)B_buf[j * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows + kk];
+                sum += (int16_t)A_buf[a_addr] * (int16_t)B_buf[b_addr];
+                a_addr++;
+                b_addr++;
             }
-            C_buf[i * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols + j] += sum;
+            C_buf[c_addr] += sum;
+            b_col_start += MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
+            c_addr++;
         }
+        a_row_start += MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+        c_row_start += MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+        b_col_start = 0;
     }
 }
 
