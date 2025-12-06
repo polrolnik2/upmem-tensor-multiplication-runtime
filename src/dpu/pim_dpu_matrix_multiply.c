@@ -171,10 +171,29 @@ int main() {
     #endif
 
     // Each tasklet processes its assigned result tiles independently
+    uint32_t i_start = my_tile_start / result_tiles_colwise;
+    uint32_t j_start = my_tile_start % result_tiles_colwise;
+
+    __mram_ptr void * b_address_start = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER +
+        (j_start * matrix2_tiles_rowwise * matrix2_tile_size_bytes));
+    __mram_ptr void * a_address_start = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix1_start_offset + DPU_MRAM_HEAP_POINTER + 
+        (i_start * matrix1_tiles_colwise * matrix1_tile_size_bytes));
+
+    __mram_ptr void * a_address = a_address_start;
+    __mram_ptr void * b_address = b_address_start;
+    __mram_ptr void * c_address = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.result_start_offset + DPU_MRAM_HEAP_POINTER +
+        (my_tile_start * result_tile_size_bytes));
+
+
     for (uint32_t tile_idx = my_tile_start; tile_idx < my_tile_end; tile_idx++) {
         // Convert linear tile index to 2D coordinates
         uint32_t i = tile_idx / result_tiles_colwise;  // row index
         uint32_t j = tile_idx % result_tiles_colwise;  // col index
+
+        if (i == i_start && tile_idx != my_tile_start)
+            a_address = a_address_start;
+        if (j == j_start)
+            b_address = b_address_start;
 
         #ifdef DEBUG
         printf("[Tasklet %d] Processing result tile [%d,%d] (linear index %d)\n", pid, i, j, tile_idx);
@@ -197,16 +216,10 @@ int main() {
             #endif
 
             // Load A tile
-            __mram_ptr void *mram_addr_A = (__mram_ptr void *)(
-                MATRIX_MULTIPLY_ARGUMENTS.matrix1_start_offset + DPU_MRAM_HEAP_POINTER + 
-                (i * matrix1_tiles_colwise + k) * matrix1_tile_size_bytes);
-            load_A_tile_from_mram(mram_addr_A, matrix1_wram[pid], matrix1_tile_size_bytes);
+            load_A_tile_from_mram(a_address, matrix1_wram[pid], matrix1_tile_size_bytes);
 
             // Load B tile
-            __mram_ptr void *mram_addr_B = (__mram_ptr void *)(
-                MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER + 
-                (j * matrix2_tiles_rowwise + k) * matrix2_tile_size_bytes);
-            load_B_tile_from_mram(mram_addr_B, matrix2_wram[pid], matrix2_tile_size_bytes);
+            load_B_tile_from_mram(b_address, matrix2_wram[pid], matrix2_tile_size_bytes);
 
             // Determine effective k for this iteration (check if it's the last k tile)
             uint32_t effective_k = (k == matrix1_tiles_colwise - 1) ? last_k_tile_k : MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
@@ -216,13 +229,15 @@ int main() {
                          effective_m,
                          effective_n,
                          effective_k);
+            
+            a_address = (__mram_ptr void *)(a_address + matrix1_tile_size_bytes);
+            b_address = (__mram_ptr void *)(b_address + matrix2_tile_size_bytes);
         }
 
         // Write completed result tile back to MRAM
-        __mram_ptr void *result_mram_addr = (__mram_ptr void *)(
-            MATRIX_MULTIPLY_ARGUMENTS.result_start_offset + DPU_MRAM_HEAP_POINTER + 
-            ((i * result_tiles_colwise + j) * result_tile_size_bytes));
-        write_C_tile_to_mram(result_wram[pid], result_mram_addr, result_tile_size_bytes);
+        write_C_tile_to_mram(result_wram[pid], c_address, result_tile_size_bytes);
+
+        c_address = (__mram_ptr void *)(c_address + result_tile_size_bytes);
 
         #ifdef DEBUG
         printf("[Tasklet %d] Completed and wrote back result tile [%d,%d]\n", pid, i, j);
