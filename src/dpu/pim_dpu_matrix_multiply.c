@@ -33,9 +33,7 @@ static uint32_t result_tiles_colwise;
 
 static uint32_t result_elements;
 
-MUTEX_INIT(log_mutex);
-
-BARRIER_INIT(my_barrier, NR_TASKLETS);
+BARRIER_INIT(main_barrier, NR_TASKLETS);
 
 static inline void load_A_tile_from_mram(__mram_ptr void *src, __dma_aligned void *dst, uint32_t bytes) {
     for (uint32_t offset = 0; offset < bytes; offset += 2048) {
@@ -183,7 +181,7 @@ int main() {
         result_elements = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
     }
 
-    barrier_wait(&my_barrier);
+    barrier_wait(&main_barrier);
 
     uint32_t start_idx;
     uint32_t end_idx;
@@ -202,7 +200,7 @@ int main() {
     if (last_k_tile_k == 0) last_k_tile_k = MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
 
 
-    barrier_wait(&my_barrier);
+    barrier_wait(&main_barrier);
 
     
     // Ping-pong buffer implementation with separate result buffer management
@@ -241,7 +239,7 @@ int main() {
 
             first_iteration = true; // Reset for next result tile
 
-            barrier_wait(&my_barrier);
+            barrier_wait(&main_barrier);
             
             // Accumulate across all K iterations for this result tile
             for (int k = 0; k < matrix1_tiles_colwise; k++) {
@@ -289,7 +287,7 @@ int main() {
                 first_iteration = false;
 
                 // Sync after input buffer swap
-                barrier_wait(&my_barrier);
+                barrier_wait(&main_barrier);
             }
             
             // Final computation for the last K iteration
@@ -300,7 +298,7 @@ int main() {
                                    effective_m, effective_n, last_k_tile_k);
             }
 
-            barrier_wait(&my_barrier);
+            barrier_wait(&main_barrier);
             
             // Now that we've completed this result tile, write it back and switch result buffer
             if (pid == 0) {
@@ -315,7 +313,7 @@ int main() {
                 result_buffer = 1 - result_buffer;
             }
             
-            barrier_wait(&my_barrier);
+            barrier_wait(&main_barrier);
         }
     }
 
@@ -326,6 +324,6 @@ int main() {
 #endif
 
     // Wait for all operations to complete
-    barrier_wait(&my_barrier);
+    barrier_wait(&main_barrier);
     return 0;
 }
