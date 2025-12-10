@@ -281,8 +281,6 @@ int main() {
                                        start_idx, end_idx,
                                        effective_m, effective_n, effective_k);
                 }
-                
-                barrier_wait(&my_barrier);
 
                 // Swap input buffers: what was being loaded becomes the compute buffer
                 int temp = input_compute_buffer;
