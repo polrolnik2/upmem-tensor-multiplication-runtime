@@ -58,18 +58,46 @@ static inline void write_C_tile_to_mram(__dma_aligned void *src, __mram_ptr void
 void cdot_accumulate(int8_t * A_buf, int8_t * B_buf, int16_t * C_buf,
                           uint32_t start_idx, uint32_t end_idx, 
                           uint32_t m_tile, uint32_t n_tile, uint32_t k_tile) {
+    uint32_t a_addr, b_addr, c_addr;
+    uint32_t a_row_start, b_col_start, c_row_start;
+    uint32_t i_start = start_idx / n_tile;
+    uint32_t j_start = start_idx % n_tile;
+    uint32_t i_end = (end_idx - 1) / n_tile;
+    uint32_t j_end = (end_idx - 1) % n_tile;
+    a_row_start = i_start * MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+    b_col_start = j_start * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
+    c_row_start = i_start * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+    c_addr = c_row_start + j_start;
+    uint32_t i = i_start;
+    uint32_t j = j_start;
     if (me() == 0) {
         return;
     }
     for (int c_idx = start_idx; c_idx < end_idx; ++c_idx) {
         int16_t sum = 0;
-        uint32_t i = c_idx / MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
-        uint32_t j = c_idx % MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+        a_addr = a_row_start;
+        b_addr = b_col_start;
         for (int kk = 0; kk < k_tile; ++kk) {
             // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
-            sum += (int16_t)A_buf[i * MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols + kk] * (int16_t)B_buf[j * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows + kk];
+            sum += (int16_t)A_buf[a_addr] * (int16_t)B_buf[b_addr];
+            a_addr++;
+            b_addr++;
         }
-        C_buf[i * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols + j] += sum;
+        C_buf[c_addr] += sum;
+        c_addr++;
+        j++;
+        if (j == n_tile) {
+            j = 0;
+            i++;
+        }
+        if (i < m_tile && j == 0) {
+            a_row_start += MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+            c_row_start += MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+            b_col_start = 0;
+            c_addr = c_row_start;
+        } else if (j < n_tile) {
+            b_col_start += MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
+        }
     }
 }
 
