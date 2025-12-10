@@ -7,6 +7,7 @@
 #include <defs.h>
 #include <barrier.h>
 #include <mutex.h>
+#include <handshake.h>
 
 #include "dpu_pim_matrix_multiply_kernel_arguments.h"
 
@@ -17,6 +18,9 @@ __dma_aligned void* aux;
 static __dma_aligned int8_t* matrix1_wram[2];
 static __dma_aligned int8_t* matrix2_wram[2];
 static __dma_aligned int16_t* result_wram[2];
+
+volatile int result_i[2] = {0, 0};
+volatile int result_j[2] = {0, 0};
 
 static uint32_t matrix1_tile_size_bytes;
 static uint32_t matrix2_tile_size_bytes;
@@ -33,7 +37,18 @@ static uint32_t result_tiles_colwise;
 
 static uint32_t result_elements;
 
+typedef enum {
+    DMA, COMPUTE
+} buffer_state_t;
+
+volatile buffer_state_t input_buffer_states[2] = {DMA, DMA};
+volatile buffer_state_t result_buffer_state[2] = {COMPUTE, COMPUTE};
+
+MUTEX_INIT(status_mutex);
+
 BARRIER_INIT(main_barrier, NR_TASKLETS);
+
+BARRIER_INIT(compute_barrier, NR_TASKLETS-1);
 
 static inline void load_A_tile_from_mram(__mram_ptr void *src, __dma_aligned void *dst, uint32_t bytes) {
     for (uint32_t offset = 0; offset < bytes; offset += 2048) {
@@ -50,6 +65,52 @@ static inline void load_B_tile_from_mram(__mram_ptr void *src, __dma_aligned voi
 static inline void write_C_tile_to_mram(__dma_aligned void *src, __mram_ptr void *dst, uint32_t bytes) {
     for (uint32_t offset = 0; offset < bytes; offset += 2048) {
         mram_write(src + offset, dst + offset, (bytes - offset) < 2048 ? (bytes - offset) : 2048);
+    }
+}
+
+void cdot(int8_t * A_buf, int8_t * B_buf, int16_t * C_buf,
+                          uint32_t start_idx, uint32_t end_idx, 
+                          uint32_t m_tile, uint32_t n_tile, uint32_t k_tile) {
+    uint32_t a_addr, b_addr, c_addr;
+    uint32_t a_row_start, b_col_start, c_row_start;
+    uint32_t i_start = start_idx / n_tile;
+    uint32_t j_start = start_idx % n_tile;
+    uint32_t i_end = (end_idx - 1) / n_tile;
+    uint32_t j_end = (end_idx - 1) % n_tile;
+    a_row_start = i_start * MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+    b_col_start = j_start * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
+    c_row_start = i_start * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+    c_addr = c_row_start + j_start;
+    uint32_t i = i_start;
+    uint32_t j = j_start;
+    if (me() == 0) {
+        return;
+    }
+    for (int c_idx = start_idx; c_idx < end_idx; ++c_idx) {
+        int16_t sum = 0;
+        a_addr = a_row_start;
+        b_addr = b_col_start;
+        for (int kk = 0; kk < k_tile; ++kk) {
+            // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
+            sum += (int16_t)A_buf[a_addr] * (int16_t)B_buf[b_addr];
+            a_addr++;
+            b_addr++;
+        }
+        C_buf[c_addr] = sum;
+        c_addr++;
+        j++;
+        if (j == n_tile) {
+            j = 0;
+            i++;
+        }
+        if (i < m_tile && j == 0) {
+            a_row_start += MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+            c_row_start += MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+            b_col_start = 0;
+            c_addr = c_row_start;
+        } else if (j < n_tile) {
+            b_col_start += MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
+        }
     }
 }
 
@@ -97,6 +158,116 @@ void cdot_accumulate(int8_t * A_buf, int8_t * B_buf, int16_t * C_buf,
             b_col_start += MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows;
         }
     }
+}
+
+void compute_tasklet(uint32_t input_buffer, uint32_t result_buffer, 
+                     uint32_t start_idx, uint32_t end_idx,
+                     uint32_t effective_m, uint32_t effective_n, uint32_t effective_k, bool first_iteration) {
+    if (me() == 1) {
+        mutex_lock(status_mutex);
+        while (!(input_buffer_states[input_buffer] == COMPUTE && result_buffer_state[result_buffer] == COMPUTE)) {
+            mutex_unlock(status_mutex);
+            handshake_wait_for(0);
+            mutex_lock(status_mutex);
+        }
+        mutex_unlock(status_mutex);
+    }
+    barrier_wait(&compute_barrier);
+    if (first_iteration) {
+        cdot(matrix1_wram[input_buffer], matrix2_wram[input_buffer],
+             result_wram[result_buffer],
+             start_idx, end_idx,
+             effective_m, effective_n, effective_k);
+    } else {
+        cdot_accumulate(matrix1_wram[input_buffer], matrix2_wram[input_buffer],
+                        result_wram[result_buffer],
+                        start_idx, end_idx,
+                        effective_m, effective_n, effective_k);
+    }
+    #ifdef DEBUG
+    if (me() == 1) {
+        printf("[DPU %d] Computed tile C(%d, %d) for indices %d to %d using buffer %d\n", me(), 
+            result_i[result_buffer], result_j[result_buffer],
+            start_idx, end_idx, result_buffer);
+    }
+    #endif
+    if (me() == 1) {
+        mutex_lock(status_mutex);
+        input_buffer_states[input_buffer] = DMA;
+        mutex_unlock(status_mutex);
+    }
+    handshake_notify();
+}
+
+bool dma_tasklet(uint32_t next_i, uint32_t next_j, uint32_t next_k,
+                 int input_buffer_index, int output_buffer_index) {
+    bool loaded_next = false;
+    mutex_lock(status_mutex);
+    if (!(input_buffer_states[0] == DMA) && !(input_buffer_states[1] == DMA) && !(result_buffer_state[0] == DMA) && !(result_buffer_state[1] == DMA)) {
+        mutex_unlock(status_mutex);
+        handshake_wait_for(1);
+    } else {
+        mutex_unlock(status_mutex);
+    }
+    if (input_buffer_states[0] == DMA) {
+        // Load new tiles into input_load_buffer
+        __mram_ptr void *mram_addr_A = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix1_start_offset + DPU_MRAM_HEAP_POINTER + 
+            (next_i * matrix1_tiles_colwise + next_k) * matrix1_tile_size_bytes);
+        load_A_tile_from_mram(mram_addr_A, matrix1_wram[0], 
+                                matrix1_tile_size_bytes);
+        __mram_ptr void *mram_addr_B = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER + 
+            (next_j * matrix2_tiles_rowwise + next_k) * matrix2_tile_size_bytes);
+        load_B_tile_from_mram(mram_addr_B, matrix2_wram[0], 
+                                matrix2_tile_size_bytes);
+        mutex_lock(status_mutex);
+        input_buffer_states[0] = COMPUTE;
+        loaded_next = true;
+        mutex_unlock(status_mutex);
+        #ifdef DEBUG
+        printf("[DPU %d] Loaded tiles A(%d, %d) and B(%d, %d) into WRAM\n", me(), next_i, next_k, next_j, next_k);
+        #endif
+    } else if (input_buffer_states[1] == DMA) {
+        // Load new tiles into input_load_buffer
+        __mram_ptr void *mram_addr_A = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix1_start_offset + DPU_MRAM_HEAP_POINTER + 
+            (next_i * matrix1_tiles_colwise + next_k) * matrix1_tile_size_bytes);
+        load_A_tile_from_mram(mram_addr_A, matrix1_wram[1], 
+                                matrix1_tile_size_bytes);
+        __mram_ptr void *mram_addr_B = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER + 
+            (next_j * matrix2_tiles_rowwise + next_k) * matrix2_tile_size_bytes);
+        load_B_tile_from_mram(mram_addr_B, matrix2_wram[1], 
+                                matrix2_tile_size_bytes);
+        mutex_lock(status_mutex);
+        input_buffer_states[1] = COMPUTE;
+        loaded_next = true;
+        mutex_unlock(status_mutex);
+        #ifdef DEBUG
+        printf("[DPU %d] Loaded tiles A(%d, %d) and B(%d, %d) into WRAM\n", me(), next_i, next_k, next_j, next_k);
+        #endif
+    } 
+    if (result_buffer_state[0] == DMA) {
+        __mram_ptr void *result_mram_addr = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.result_start_offset + DPU_MRAM_HEAP_POINTER + 
+            ((result_i[0] * result_tiles_colwise + result_j[0]) * result_tile_size_bytes));
+        write_C_tile_to_mram(result_wram[0], result_mram_addr, result_tile_size_bytes);
+        mutex_lock(status_mutex);
+        result_buffer_state[0] = COMPUTE;
+        mutex_unlock(status_mutex);
+        #ifdef DEBUG
+        printf("[DPU %d] Completed writing result tile C(%d, %d) to MRAM\n", me(), result_i[0], result_j[0]);
+        #endif
+    } 
+    if (result_buffer_state[1] == DMA) {
+        __mram_ptr void *result_mram_addr = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.result_start_offset + DPU_MRAM_HEAP_POINTER + 
+            ((result_i[1] * result_tiles_colwise + result_j[1]) * result_tile_size_bytes));
+        write_C_tile_to_mram(result_wram[1], result_mram_addr, result_tile_size_bytes);
+        mutex_lock(status_mutex);
+        result_buffer_state[1] = COMPUTE;
+        mutex_unlock(status_mutex);
+        #ifdef DEBUG
+        printf("[DPU %d] Completed writing result tile C(%d, %d) to MRAM\n", me(), result_i[1], result_j[1]);
+        #endif
+    }
+    handshake_notify();
+    return loaded_next;
 }
 
 /**
@@ -202,118 +373,51 @@ int main() {
 
     barrier_wait(&main_barrier);
 
-    
-    // Ping-pong buffer implementation with separate result buffer management
     int input_compute_buffer = 0;
-    int input_load_buffer = 1;
-    int result_buffer = 0;  // Result buffer switches only when we finish a complete result tile
+    int result_compute_buffer = 0; 
     bool first_iteration = true;
     
-    for (int i = 0; i < result_tiles_rowwise; i++) {
-        for (int j = 0; j < result_tiles_colwise; j++) {
-#ifdef DEBUG
-            if (pid == 0) {
-                printf("[DPU %d] Processing result tile [%d,%d] using result buffer %d\n", pid, i, j, 0);
-            }
-#endif  
-            // Clear result buffer for new result tile
-            if (pid == 0) {
-                for (uint32_t idx = 0; idx < result_elements; idx++) {
-                    result_wram[0][idx] = 0;
-                }
-            }
-
-            // Determine effective m and n for this tile (check if it's an outermost tile)
-            uint32_t effective_m = (i == result_tiles_rowwise - 1) ? last_row_tile_m : MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
-            uint32_t effective_n = (j == result_tiles_colwise - 1) ? last_col_tile_n : MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
-
-            if (pid != 0) {
+    if (pid != 0) {
+        for (int i = 0; i < result_tiles_rowwise; i++) {
+            for (int j = 0; j < result_tiles_colwise; j++) {
+                uint32_t effective_m = (i == result_tiles_rowwise - 1) ? last_row_tile_m : MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
+                uint32_t effective_n = (j == result_tiles_colwise - 1) ? last_col_tile_n : MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
                 uint32_t elements_for_this_tasklet = effective_m * effective_n;
                 uint32_t tiles_per_tasklet = (elements_for_this_tasklet + (NR_TASKLETS - 2)) / (NR_TASKLETS - 1);
                 start_idx = (pid - 1) * tiles_per_tasklet;
                 end_idx = start_idx + tiles_per_tasklet;
+                mutex_lock(status_mutex);
+                result_i[result_compute_buffer] = i;
+                result_j[result_compute_buffer] = j;
+                mutex_unlock(status_mutex);
                 if (end_idx > elements_for_this_tasklet) {
                     end_idx = elements_for_this_tasklet;
                 }
-            }
-
-            first_iteration = true; // Reset for next result tile
-
-            barrier_wait(&main_barrier);
-            
-            // Accumulate across all K iterations for this result tile
-            for (int k = 0; k < matrix1_tiles_colwise; k++) {
-#ifdef DEBUG
-                if (pid == 0) {
-                    printf("[DPU %d] K iteration %d/%d, input buffers: compute=%d, load=%d, result buffer=%d\n", 
-                           pid, k, matrix1_tiles_colwise-1, input_compute_buffer, input_load_buffer, 0);
+                first_iteration = true;
+                for (int k = 0; k < matrix1_tiles_colwise; k++) {
+                    uint32_t effective_k = (k == matrix1_tiles_colwise - 1) ? last_k_tile_k : MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+                    compute_tasklet(input_compute_buffer, result_compute_buffer,
+                                     start_idx, end_idx,
+                                     effective_m, effective_n, effective_k, first_iteration);
+                    input_compute_buffer = 1 - input_compute_buffer;
+                    first_iteration = false;
+                    barrier_wait(&compute_barrier);
                 }
-#endif
-                
-                // Thread 0: Handle memory operations for next iteration
-                if (pid == 0) {
-                    // Load new tiles into input_load_buffer
-                    __mram_ptr void *mram_addr_A = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix1_start_offset + DPU_MRAM_HEAP_POINTER + 
-                        (i * matrix1_tiles_colwise + k) * matrix1_tile_size_bytes);
-                    load_A_tile_from_mram(mram_addr_A, matrix1_wram[input_load_buffer], 
-                                         matrix1_tile_size_bytes);
-                    __mram_ptr void *mram_addr_B = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix2_start_offset + DPU_MRAM_HEAP_POINTER + 
-                        (j * matrix2_tiles_rowwise + k) * matrix2_tile_size_bytes);
-#ifdef DEBUG
-                    printf("[DPU %d] Loading A tile for [%d,%d] from MRAM addr:%p to input buffer %d\n", 
-                           pid, i, k, mram_addr_A, input_load_buffer);
-                    printf("[DPU %d] Loading B tile for [%d,%d] from MRAM addr:%p to input buffer %d\n", 
-                           pid, k, j, mram_addr_B, input_load_buffer);
-#endif
-                    load_B_tile_from_mram(mram_addr_B, matrix2_wram[input_load_buffer], 
-                                         matrix2_tile_size_bytes);
+                mutex_lock(status_mutex);
+                result_buffer_state[result_compute_buffer] = DMA;
+                mutex_unlock(status_mutex);
+                result_compute_buffer = 1 - result_compute_buffer;
+            }
+        }
+    } else {
+        for (int i = 0; i < result_tiles_rowwise; i++) {
+            for (int j = 0; j < result_tiles_colwise; j++) {
+                for (int k = 0; k < matrix1_tiles_colwise; k++) {
+                    bool result = dma_tasklet(i, j, k, input_compute_buffer, result_compute_buffer);
+                    if (!result)
+                        k--;
                 }
-
-                // Determine effective k for this iteration (check if it's the last k tile)
-                uint32_t effective_k = (k == matrix1_tiles_colwise - 1) ? last_k_tile_k : MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
-                
-                // All threads except tasklet 0: Compute on input_compute_buffer, accumulate into result_buffer
-                if (!first_iteration && pid != 0) {
-                    cdot_accumulate(matrix1_wram[input_compute_buffer], matrix2_wram[input_compute_buffer],
-                                       result_wram[0],
-                                       start_idx, end_idx,
-                                       effective_m, effective_n, effective_k);
-                }
-
-                // Swap input buffers: what was being loaded becomes the compute buffer
-                int temp = input_compute_buffer;
-                input_compute_buffer = input_load_buffer;
-                input_load_buffer = temp;
-                first_iteration = false;
-
-                // Sync after input buffer swap
-                barrier_wait(&main_barrier);
             }
-            
-            // Final computation for the last K iteration
-            if (pid != 0) {
-                cdot_accumulate(matrix1_wram[input_compute_buffer], matrix2_wram[input_compute_buffer],
-                                   result_wram[0],
-                                   start_idx, end_idx,
-                                   effective_m, effective_n, last_k_tile_k);
-            }
-
-            barrier_wait(&main_barrier);
-            
-            // Now that we've completed this result tile, write it back and switch result buffer
-            if (pid == 0) {
-                __mram_ptr void *result_mram_addr = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.result_start_offset + DPU_MRAM_HEAP_POINTER + 
-                    ((i * result_tiles_colwise + j) * result_tile_size_bytes));
-                write_C_tile_to_mram(result_wram[0], result_mram_addr, result_tile_size_bytes);
-#ifdef DEBUG
-                printf("[DPU %d] Wrote back completed result tile [%d,%d] to MRAM addr:%p from result buffer %d\n", 
-                       pid, i, j, result_mram_addr, 0);
-#endif
-                // Switch to the other result buffer for the next result tile
-                result_buffer = 1 - result_buffer;
-            }
-            
-            barrier_wait(&main_barrier);
         }
     }
 
@@ -325,5 +429,6 @@ int main() {
 
     // Wait for all operations to complete
     barrier_wait(&main_barrier);
+
     return 0;
 }
