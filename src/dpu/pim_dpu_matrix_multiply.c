@@ -55,27 +55,21 @@ static inline void write_C_tile_to_mram(__dma_aligned void *src, __mram_ptr void
     }
 }
 
-void compute_tile_tasklet(uint32_t tasklet_id, uint32_t row_0, uint32_t row_max,
-                          uint32_t m_tile, uint32_t n_tile, uint32_t k_tile,
-                          uint32_t input_buffer_idx, uint32_t result_buffer_idx) {
-    // Tasklet 0 doesn't compute, only tasklets 1 to n_tasklets-1 participate
-    if (tasklet_id == 0) {
-        return; // Tasklet 0 handles memory operations only
+void cdot_accumulate(int8_t * A_buf, int8_t * B_buf, int16_t * C_buf,
+                          uint32_t start_idx, uint32_t end_idx, 
+                          uint32_t m_tile, uint32_t n_tile, uint32_t k_tile) {
+    if (me() == 0) {
+        return;
     }
-    
-    int8_t* A_buf = matrix1_wram[input_buffer_idx];
-    int8_t* B_buf = matrix2_wram[input_buffer_idx];
-    int16_t* C_buf = result_wram[result_buffer_idx];
-
-    for (int i = row_0; i < row_max; ++i) {
-        for (int j = 0; j < n_tile; ++j) {
-            int16_t sum = 0;
-            for (int kk = 0; kk < k_tile; ++kk) {
-                // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
-                sum += (int8_t)A_buf[i * k_tile + kk] * (int8_t)B_buf[j * k_tile + kk];
-            }
-            C_buf[i * n_tile + j] += sum;
+    for (int c_idx = start_idx; c_idx < end_idx; ++c_idx) {
+        int16_t sum = 0;
+        uint32_t i = c_idx / MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+        uint32_t j = c_idx % MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+        for (int kk = 0; kk < k_tile; ++kk) {
+            // Matrix B is column-major: B[kk][j] = B_buf[j * k_tile + kk]
+            sum += (int16_t)A_buf[i * MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols + kk] * (int16_t)B_buf[j * MATRIX_MULTIPLY_ARGUMENTS.matrix2_tile_rows + kk];
         }
+        C_buf[i * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols + j] += sum;
     }
 }
 
@@ -161,15 +155,24 @@ int main() {
         result_elements = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
     }
 
-    uint32_t row_0;
-    uint32_t row_max;
-
     barrier_wait(&my_barrier);
 
-    if (pid != 0) {
-        row_0 = (pid - 1) * rows_per_tasklet;
-        row_max = (row_0 + rows_per_tasklet) < MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows ? (row_0 + rows_per_tasklet) : MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
-    }
+    uint32_t start_idx;
+    uint32_t end_idx;
+
+    // Calculate effective dimensions for outermost tiles (only computed once)
+    // Last row tile may have padding
+    uint32_t last_row_tile_m = MATRIX_MULTIPLY_ARGUMENTS.matrix1_original_rows % MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
+    if (last_row_tile_m == 0) last_row_tile_m = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
+    
+    // Last column tile may have padding
+    uint32_t last_col_tile_n = MATRIX_MULTIPLY_ARGUMENTS.matrix2_original_cols % MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+    if (last_col_tile_n == 0) last_col_tile_n = MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+    
+    // Last k tile may have padding
+    uint32_t last_k_tile_k = MATRIX_MULTIPLY_ARGUMENTS.matrix1_original_cols % MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+    if (last_k_tile_k == 0) last_k_tile_k = MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
+
 
     barrier_wait(&my_barrier);
 
@@ -193,6 +196,21 @@ int main() {
                     result_wram[0][idx] = 0;
                 }
             }
+
+            // Determine effective m and n for this tile (check if it's an outermost tile)
+            uint32_t effective_m = (i == result_tiles_rowwise - 1) ? last_row_tile_m : MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows;
+            uint32_t effective_n = (j == result_tiles_colwise - 1) ? last_col_tile_n : MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+
+            if (pid != 0) {
+                uint32_t elements_for_this_tasklet = effective_m * effective_n;
+                uint32_t tiles_per_tasklet = (elements_for_this_tasklet + (NR_TASKLETS - 2)) / (NR_TASKLETS - 1);
+                start_idx = (pid - 1) * tiles_per_tasklet;
+                end_idx = start_idx + tiles_per_tasklet;
+                if (end_idx > elements_for_this_tasklet) {
+                    end_idx = elements_for_this_tasklet;
+                }
+            }
+
             first_iteration = true; // Reset for next result tile
 
             barrier_wait(&my_barrier);
@@ -224,19 +242,20 @@ int main() {
                     load_B_tile_from_mram(mram_addr_B, matrix2_wram[input_load_buffer], 
                                          matrix2_tile_size_bytes);
                 }
+
+                // Determine effective k for this iteration (check if it's the last k tile)
+                uint32_t effective_k = (k == matrix1_tiles_colwise - 1) ? last_k_tile_k : MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
                 
                 // All threads except tasklet 0: Compute on input_compute_buffer, accumulate into result_buffer
                 if (!first_iteration && pid != 0) {
-                    compute_tile_tasklet(pid, row_0, row_max,
-                                       MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, 
-                                       MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, 
-                                       MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
-                                       input_compute_buffer, 0);
+                    cdot_accumulate(matrix1_wram[input_compute_buffer], matrix2_wram[input_compute_buffer],
+                                       result_wram[0],
+                                       start_idx, end_idx,
+                                       effective_m, effective_n, effective_k);
                 }
                 
-                // Synchronize before input buffer swap
                 barrier_wait(&my_barrier);
-                
+
                 // Swap input buffers: what was being loaded becomes the compute buffer
                 int temp = input_compute_buffer;
                 input_compute_buffer = input_load_buffer;
@@ -249,11 +268,10 @@ int main() {
             
             // Final computation for the last K iteration
             if (pid != 0) {
-                compute_tile_tasklet(pid, row_0, row_max,
-                                   MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows, 
-                                   MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols, 
-                                   MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols,
-                                   input_compute_buffer, 0);
+                cdot_accumulate(matrix1_wram[input_compute_buffer], matrix2_wram[input_compute_buffer],
+                                   result_wram[0],
+                                   start_idx, end_idx,
+                                   effective_m, effective_n, last_k_tile_k);
             }
 
             barrier_wait(&my_barrier);

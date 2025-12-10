@@ -21,6 +21,10 @@ typedef struct {
     uint32_t matrix2_type_size;
     uint32_t result_type_size;
     uint32_t wram_input_tile_size; // Size of input tile in WRAM
+    uint32_t matrix1_original_rows;
+    uint32_t matrix1_original_cols;
+    uint32_t matrix2_original_rows;
+    uint32_t matrix2_original_cols;
 } dpu_pim_matrix_multiply_kernel_arguments_t;
 
 #endif // __DPU_PIM_MATRIX_MULTIPLY_KERNEL_ARGUMENTS_H___
