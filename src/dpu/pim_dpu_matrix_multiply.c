@@ -165,13 +165,9 @@ void compute_tasklet(uint32_t input_buffer, uint32_t result_buffer,
                      uint32_t effective_m, uint32_t effective_n, uint32_t effective_k, 
                      uint32_t i, uint32_t j, bool first_iteration) {
     if (me() == 1) {
-        mutex_lock(status_mutex);
         while (!(input_buffer_states[input_buffer] == COMPUTE && result_buffer_state[result_buffer] == COMPUTE)) {
-            mutex_unlock(status_mutex);
-            handshake_wait_for(0);
-            mutex_lock(status_mutex);
+            ;
         }
-        mutex_unlock(status_mutex);
         if (first_iteration) {
             result_i[result_buffer] = i;
             result_j[result_buffer] = j;
@@ -201,18 +197,13 @@ void compute_tasklet(uint32_t input_buffer, uint32_t result_buffer,
         input_buffer_states[input_buffer] = DMA;
         mutex_unlock(status_mutex);
     }
-    handshake_notify();
 }
 
 bool dma_tasklet(uint32_t next_i, uint32_t next_j, uint32_t next_k,
                  int input_buffer_index, int output_buffer_index) {
     bool loaded_next = false;
-    mutex_lock(status_mutex);
-    if (!(input_buffer_states[0] == DMA) && !(input_buffer_states[1] == DMA) && !(result_buffer_state[0] == DMA) && !(result_buffer_state[1] == DMA)) {
-        mutex_unlock(status_mutex);
-        handshake_wait_for(1);
-    } else {
-        mutex_unlock(status_mutex);
+    while (!(input_buffer_states[0] == DMA) && !(input_buffer_states[1] == DMA) && !(result_buffer_state[0] == DMA) && !(result_buffer_state[1] == DMA)) {
+        ;
     }
     if (input_buffer_states[input_buffer_index] == DMA) {
         // Load new tiles into input_load_buffer
@@ -243,7 +234,6 @@ bool dma_tasklet(uint32_t next_i, uint32_t next_j, uint32_t next_k,
         printf("[DPU %d] Completed writing result tile C(%d, %d) to MRAM\n", me(), result_i[output_buffer_index], result_j[output_buffer_index]);
         #endif
     } 
-    handshake_notify();
     return loaded_next;
 }
 
@@ -401,6 +391,11 @@ int main() {
             }
         }
     }
+
+    barrier_wait(&main_barrier);
+
+    dma_tasklet(result_tiles_rowwise-1, result_tiles_colwise-1, matrix1_tiles_colwise-1, 0, 0);
+    dma_tasklet(result_tiles_rowwise-1, result_tiles_colwise-1, matrix1_tiles_colwise-1, 0, 1);
 
 #ifdef DEBUG
     if (pid == 0) {
