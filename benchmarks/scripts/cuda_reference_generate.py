@@ -15,6 +15,8 @@ This script distributes the row-blocks of the output across MPI ranks; rank 0 co
 import sys
 import argparse
 import numpy as np
+import time
+import cupy as cp
 import os
 
 
@@ -28,29 +30,39 @@ def read_matrix_text(path, dtype=np.int64):
 		if len(parts) < 2:
 			raise ValueError(f"Invalid header in {path}: '{header}'")
 		rows = int(parts[0]); cols = int(parts[1])
-	# Use numpy to load the remaining data; expect rows lines each with cols values
+
+	# Load remaining data with numpy (use a safe integer dtype), then convert to cupy
 	data = np.loadtxt(path, dtype=dtype, skiprows=1)
-	# Handle the case where loadtxt returns 1D for rows*cols=1 or single-row
 	data = np.asarray(data)
+
 	if data.ndim == 1:
 		# Either a single row or flattened; reshape accordingly
 		if data.size != rows * cols:
-			# Could be that each row is a separate line but loadtxt returned 1D; try reading all ints
-			data = np.fromfile(path, sep=' ', dtype=dtype)
-			# Skip header entries
-			if data.size >= 2:
-				data = data[2:]
-		# Now reshape
-		data = data.reshape((rows, cols))
+			# Fallback: read all numeric tokens and skip header tokens
+			allnums = np.fromfile(path, sep=' ', dtype=dtype)
+			if allnums.size >= 2:
+				allnums = allnums[2:]
+			if allnums.size != rows * cols:
+				raise ValueError(f"Data size mismatch reading {path}: header {rows}x{cols}, data size {allnums.size}")
+			data = allnums.reshape((rows, cols))
+		else:
+			data = data.reshape((rows, cols))
 	else:
-		# If 2D, ensure shape matches
+		# If 2D, ensure shape matches; try to flatten and reshape if necessary
 		if data.shape[0] != rows or data.shape[1] != cols:
-			# try to flatten and reshape
 			flat = data.flatten()
 			if flat.size != rows * cols:
 				raise ValueError(f"Data size mismatch reading {path}: header {rows}x{cols}, data shape {data.shape}")
 			data = flat.reshape((rows, cols))
-	return data
+
+	# Convert to cupy array with requested dtype (accepts numpy or cupy dtypes)
+	try:
+		cp_array = cp.array(data, dtype=dtype)
+	except Exception:
+		# If dtype is not accepted directly, let cupy infer
+		cp_array = cp.asarray(data)
+
+	return cp_array
 
 
 def write_matrix_text(path, mat):
@@ -74,8 +86,8 @@ def main():
 	rows = cols = None
 
 	try:
-		A = read_matrix_text(args.matrix_a, dtype=np.int64)
-		B = read_matrix_text(args.matrix_b, dtype=np.int64)
+		A = read_matrix_text(args.matrix_a, dtype=cp.int16)
+		B = read_matrix_text(args.matrix_b, dtype=cp.int16)
 	except Exception as e:
 		print(f"Error reading input files: {e}", file=sys.stderr)
 
@@ -85,9 +97,25 @@ def main():
 	rows, k = A.shape
 	k2, cols = B.shape
 
-	result = A.dot(B)
+	cp.cuda.Device().synchronize()
+	start_time = time.time()
+
+	result = cp.matmul(A, B)
+
+	cp.cuda.Device().synchronize()
+	end_time = time.time()
 
 	# write to file
+	time_path = args.output + ".time"
+	try:
+		with open(time_path, 'w') as tf:
+			tf.write(f"MP dot() took: {end_time - start_time:.4f}s\n")
+	except Exception as e:
+		print(f"Failed to write time file {time_path}: {e}", file=sys.stderr)
+
+	# load the matrix back from GPU to host before writing
+	cp.cuda.Device().synchronize()
+	result = cp.asnumpy(result)
 	write_matrix_text(args.output, result)
 	print(f"Reference matrix written to {args.output} (shape {result.shape}, dtype {result.dtype})")
 

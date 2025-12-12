@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
-# Weak scaling test harness for test_from_file.
+# Strong scaling test harness for test_from_file.
 # - Compiles the benchmark locally using the repo makefile.
-# - For each class (DPU count, matrix sizes), runs multiple randomized instances.
-# - Logs seed, command output, and metadata per class.
-# - Cleans up generated input files after each run.
+# - For each pair directory under scratch/references, runs the test with
+#   several DPU counts and records elapsed times and errors per-DPU.
+# - Output:
+#   scratch/runtime_logs/strong_scaling/times_dpus-<N>.csv  (pair,elapsed_sec,exit_code)
+#   scratch/runtime_logs/strong_scaling/errors_dpus-<N>.log (stderr output per run)
 
 set -euo pipefail
 
@@ -12,62 +14,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-POSSIBLE_UPMEM_ENVS=(
-	"/opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh"
-	"/opt/upmem-2024.3.0-Linux-x86_64/upmem_env.sh"
-)
-
-# Configuration: edit these arrays to define classes
-# DPU counts to test
-DPU_COUNTS=(1 25 100 225 400 625)
-# Matrix size triplets: "M,K,N" means A is MxK, B is KxN
-SIZE_CLASSES=(
-	"3965,3965,3965"
-	"11675,11675,11675"
-	"17438,17438,17438"
-	"21673,21673,21673"
-	"25082,25082,25082"
-	"28043,28043,28043"
-)
-# Number of randomized instances per class
-INSTANCES=5
-
-# Value range for generated matrices (uint8 inputs)
-GEN_MIN=0
-GEN_MAX=15
-
-LOG_DIR_HOST="${ROOT}/scratch/runtime_logs/test_from_file"
+LOG_DIR_HOST="${ROOT}/scratch/runtime_logs/weak_scaling"
 BIN_HOST="${ROOT}/bin/test_from_file"
+REF_DIR_BASE="${ROOT}/scratch/references"
 
 mkdir -p "${LOG_DIR_HOST}"
-
-random_seed() {
-	# Try to read 4 bytes from urandom; fallback to time + $$ + RANDOM
-	if command -v od >/dev/null 2>&1; then
-		od -An -N4 -tu4 < /dev/urandom | tr -d ' ' || true
-	else
-		date +%s%N
-	fi
-}
-
-source_env_if_available() {
-	# Source UPMEM environment if found and not already configured.
-	if ! command -v dpu-pkg-config >/dev/null 2>&1; then
-		for envfile in "${POSSIBLE_UPMEM_ENVS[@]}"; do
-			if [[ -f "${envfile}" ]]; then
-				# Use simulator by default if script accepts it
-				# shellcheck disable=SC1090
-				. "${envfile}" simulator || true
-				break
-			fi
-		done
-	fi
-	# Source project env if present
-	if [[ -f "${ROOT}/source.me" ]]; then
-		# shellcheck disable=SC1091
-		. "${ROOT}/source.me" || true
-	fi
-}
 
 compile_locally() {
 	echo "[INFO] Compiling test_from_file locally..."
@@ -81,81 +32,80 @@ compile_locally() {
 		exit 1
 	fi
 	make -C "${ROOT}/benchmarks" compile FILE=test_from_file.c
-	ls -l "${BIN_HOST}" || {
-		echo "[ERROR] Build completed but binary not found at ${BIN_HOST}"; exit 1; }
+	ls -l "${BIN_HOST}" || { echo "[ERROR] Build completed but binary not found at ${BIN_HOST}"; exit 1; }
 }
 
-run_one_instance() {
-	local dpus="$1" mkn="$2" seedA="$3" idx="$4"
-	local m k n
-	IFS=',' read -r m k n <<< "${mkn}"
+# Run one pair with specified dpus; append results to per-dpu logs.
+run_one_pair() {
+	local dpus="$1"
+	local pair_dir="$2"
+	local pair_name
+	pair_name="$(basename "${pair_dir}")"
 
-	local class_log_host="${LOG_DIR_HOST}/class_dpus-${dpus}_m-${m}_k-${k}_n-${n}.log"
+	local A_FILE="${pair_dir}/A_matrix.txt"
+	local B_FILE="${pair_dir}/B_matrix.txt"
+	local Q_FILE="${pair_dir}/Q.txt"
 
-	echo "[INFO] Running class dpus=${dpus} size=${m}x${k} * ${k}x${n} (instance ${idx}, seed=${seedA})"
+	local times_file="${LOG_DIR_HOST}/times_dpus-${dpus}.csv"
+	local errors_file="${LOG_DIR_HOST}/errors_dpus-${dpus}.log"
 
 	mkdir -p "${LOG_DIR_HOST}"
-	local A_FILE="${LOG_DIR_HOST}/A_${seedA}.txt"
-	local B_FILE="${LOG_DIR_HOST}/B_$((seedA+1)).txt"
-	local seedB=$((seedA+1))
-
-	{
-		echo '---'
-		echo "timestamp: $(date -Iseconds)"
-		echo "dpus: ${dpus}"
-		echo "sizes: A=${m}x${k} B=${k}x${n}"
-		echo "seedA: ${seedA}"
-		echo "seedB: ${seedB}"
-		echo "generate_A_output:"
-	} >> "${class_log_host}"
-
-	python3 "${ROOT}/scripts/generate_random_matrix.py" "${m}" "${k}" "${A_FILE}" \
-		--min "${GEN_MIN}" --max "${GEN_MAX}" --density 1.0 --format text --seed "${seedA}" \
-		>> "${class_log_host}" 2>&1
-
-	{
-		echo "generate_B_output:"
-	} >> "${class_log_host}"
-
-	python3 "${ROOT}/scripts/generate_random_matrix.py" "${k}" "${n}" "${B_FILE}" \
-		--min "${GEN_MIN}" --max "${GEN_MAX}" --density 1.0 --format text --seed "${seedB}" \
-		>> "${class_log_host}" 2>&1
-
-	{
-		echo 'run_output:'
-		echo "cmd: ${BIN_HOST} ${A_FILE} ${B_FILE} --dpus ${dpus}"
-	} >> "${class_log_host}"
-
-	set +e
-	"${BIN_HOST}" "${A_FILE}" "${B_FILE}" --dpus "${dpus}" >> "${class_log_host}" 2>&1
-	rc=$?
-	set -e
-	if [[ $rc -ne 0 ]]; then
-		echo "exit_code: ${rc}" >> "${class_log_host}"
-	else
-		echo "exit_code: 0" >> "${class_log_host}"
+	# Ensure times file has header
+	if [[ ! -f "${times_file}" ]]; then
+		echo "pair,elapsed_sec,exit_code" > "${times_file}"
 	fi
 
-	rm -f "${A_FILE}" "${B_FILE}"
+	if [[ ! -f "${A_FILE}" || ! -f "${B_FILE}" || ! -f "${Q_FILE}" ]]; then
+		echo "[WARN] Missing files in ${pair_dir}; expected A_matrix.txt, B_matrix.txt, Q.txt" >> "${errors_file}"
+		echo "${pair_name},,1" >> "${times_file}"
+		return
+	fi
+
+	echo "[INFO] Running pair=${pair_name} dpus=${dpus}"
+
+	perrun_dir="${LOG_DIR_HOST}/per_run_output/dpus-${dpus}"
+	mkdir -p "${perrun_dir}"
+	perrun_log="${LOG_DIR_HOST}/per_run_output/dpus-${dpus}-pair-${pair_name}.log"
+
+	# allow the program to fail without causing the script to exit
+	set +e
+	"${BIN_HOST}" "${A_FILE}" "${B_FILE}" --reference-file "${Q_FILE}" --dpus "${dpus}" 1>${perrun_log} 2>>"${errors_file}"
+	rc=$?
+	set -e
+
+	# extract the program's stderr block for this run (we wrote a 'command:' header just above)
+	# find last occurrence of 'command:' and save following lines (program stderr) to a per-run file
+	last_cmd_line=$(grep -n '^command:' "${errors_file}" | tail -n 1 | cut -d: -f1 || true)
+	perrun_file="${perrun_dir}/${pair_name}.stderr"
+	if [[ -n "${last_cmd_line}" ]]; then
+		start_line=$((last_cmd_line + 1))
+		sed -n "${start_line},\$p" "${errors_file}" > "${perrun_file}" || true
+	else
+		: > "${perrun_file}"
+	fi
+
+	# Parse a time-like line from the program stderr (if any) and record to a per-dpu CSV
+	program_times_file="${LOG_DIR_HOST}/program_times_dpus-${dpus}.csv"
+	if [[ ! -f "${program_times_file}" ]]; then
+		echo "pair,program_time_line" > "${program_times_file}"
+	fi
+	# look for common time keywords or units (case-insensitive) and take the first match
+	time_line=$(grep -iE 'time|elapsed|ms|msec|sec|s\b' "${perrun_file}" | sed -n '1p' || true)
+	# escape double quotes to keep CSV valid
+	time_line_esc=$(printf '%s' "${time_line}" | sed 's/"/""/g')
+	echo "${pair_name},\"${time_line_esc}\"" >> "${program_times_file}"
 }
 
 main() {
-	source_env_if_available
 	compile_locally
-
-	local idx
-	for dpus in "${DPU_COUNTS[@]}"; do
-		for mkn in "${SIZE_CLASSES[@]}"; do
-			for ((idx=1; idx<=INSTANCES; idx++)); do
-				seedA=$(random_seed)
-				# fallback if empty
-				if [[ -z "${seedA}" ]]; then seedA=$(date +%s%N); fi
-				run_one_instance "${dpus}" "${mkn}" "${seedA}" "${idx}"
-			done
-		done
+	touch "${LOG_DIR_HOST}/errors_dpus-${dpus}.log"
+	# iterate pair directories
+	for pair_dir in "${REF_DIR_BASE}"/*/; do
+		# if no dirs match, skip
+		[[ -d "${pair_dir}" ]] || continue
+		run_one_pair "${dpus}" "${pair_dir}"
 	done
-
-	echo "[INFO] All tests completed. Logs in ${LOG_DIR_HOST}"
+	echo "[INFO] Completed dpus=${dpus}. Times: ${LOG_DIR_HOST}/times_dpus-${dpus}.csv Errors: ${LOG_DIR_HOST}/errors_dpus-${dpus}.log"
 }
 
 main "$@"

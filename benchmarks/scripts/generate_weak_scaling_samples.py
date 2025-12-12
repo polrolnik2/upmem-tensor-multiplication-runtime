@@ -31,10 +31,10 @@ import numpy as np
 
 
 DEFAULT_SIZES = [
-	"3965,3965,3965"
-	"11675,11675,11675"
-	"17438,17438,17438"
-	"21673,21673,21673"
+	"3965,3965,3965",
+	"11675,11675,11675",
+	"17438,17438,17438",
+	"21673,21673,21673",
 	"25082,25082,25082",
 	"28043,28043,28043",
 ]
@@ -59,9 +59,16 @@ def write_matrix_text(path, mat):
 
 def main():
 	parser = argparse.ArgumentParser(description='Generate A/B inputs and reference product matrices')
+	# Batch mode (default): generate many samples across one or more size triplets
 	parser.add_argument('--sizes', nargs='*', type=parse_size, default=[parse_size(s) for s in DEFAULT_SIZES],
 						help='Size triplets M,K,N (A is MxK, B is KxN). Provide multiple as separate args.')
 	parser.add_argument('--instances', type=int, default=5, help='Number of randomized instances per class')
+
+	# Single-sample mode: if --m/--k/--n are provided, only one sample is generated
+	parser.add_argument('--m', type=int, help='Single-sample: rows of A (MxK)')
+	parser.add_argument('--k', type=int, help='Single-sample: cols of A / rows of B (MxK, KxN)')
+	parser.add_argument('--n', type=int, help='Single-sample: cols of B (KxN)')
+	parser.add_argument('--seedA', type=int, help='Single-sample: seed for A (B uses seedA+1)')
 	parser.add_argument('--out-dir', default='scratch/references', help='Output directory for generated files')
 	parser.add_argument('--min', type=int, default=0, help='Min random value (inclusive) for inputs')
 	parser.add_argument('--max', type=int, default=15, help='Max random value (inclusive) for inputs')
@@ -74,6 +81,11 @@ def main():
 
 	rng = np.random.default_rng(args.seed)
 
+	# Validate min/max allow negatives and correct ordering
+	if args.min > args.max:
+		print(f"--min ({args.min}) cannot be greater than --max ({args.max})", file=sys.stderr)
+		sys.exit(2)
+
 	# locate generator script relative to repo root
 	script_dir = os.path.dirname(os.path.abspath(__file__))
 	repo_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
@@ -81,6 +93,42 @@ def main():
 	if not os.path.isfile(gen_script):
 		print(f"Generator script not found at {gen_script}", file=sys.stderr)
 		sys.exit(1)
+
+	# Single-sample mode if m,k,n provided
+	if (args.m is not None) or (args.k is not None) or (args.n is not None):
+		if args.m is None or args.k is None or args.n is None:
+			print("When using single-sample mode, you must provide --m, --k, and --n", file=sys.stderr)
+			sys.exit(2)
+
+		m, k, n = int(args.m), int(args.k), int(args.n)
+		class_name = f"class_m-{m}_k-{k}_n-{n}"
+		class_dir = os.path.join(out_root, class_name)
+		os.makedirs(class_dir, exist_ok=True)
+
+		seedA = int(args.seedA) if args.seedA is not None else int(rng.integers(1, 2**31 - 1))
+		seedB = seedA + 1
+
+		A_file = os.path.join(class_dir, f"A_{seedA}.txt")
+		B_file = os.path.join(class_dir, f"B_{seedB}.txt")
+
+		print(f"Generating single sample for {class_name}: seedA={seedA}, seedB={seedB}")
+		try:
+			subprocess.run([sys.executable, gen_script, str(m), str(k), A_file,
+						'--min', str(args.min), '--max', str(args.max),
+						'--density', '1.0', '--format', 'text', '--seed', str(seedA)],
+					   check=True)
+
+			subprocess.run([sys.executable, gen_script, str(k), str(n), B_file,
+						'--min', str(args.min), '--max', str(args.max),
+						'--density', '1.0', '--format', 'text', '--seed', str(seedB)],
+					   check=True)
+		except subprocess.CalledProcessError as e:
+			print(f"Generator failed: {e}", file=sys.stderr)
+			sys.exit(1)
+
+		print(f"Generated A -> {A_file}, B -> {B_file}")
+		print(f"Sample written under {class_dir}")
+		return
 
 	for (m, k, n) in args.sizes:
 		class_name = f"class_m-{m}_k-{k}_n-{n}"
