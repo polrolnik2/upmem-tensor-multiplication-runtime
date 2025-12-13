@@ -8,6 +8,7 @@
 #include <barrier.h>
 #include <mutex.h>
 #include <handshake.h>
+#include <sem.h>
 
 #include "dpu_pim_matrix_multiply_kernel_arguments.h"
 
@@ -43,6 +44,12 @@ typedef enum {
 
 volatile buffer_state_t input_buffer_states[2] = {DMA, DMA};
 volatile buffer_state_t result_buffer_state[2] = {COMPUTE, COMPUTE};
+
+SEMAPHORE_INIT(input_ready_1, 0);
+SEMAPHORE_INIT(input_ready_2, 0);
+SEMAPHORE_INIT(result_ready_1, 1);
+SEMAPHORE_INIT(result_ready_2, 1);
+SEMAPHORE_INIT(dma_request, 1);
 
 MUTEX_INIT(status_mutex);
 
@@ -165,8 +172,21 @@ void compute_tasklet(uint32_t input_buffer, uint32_t result_buffer,
                      uint32_t effective_m, uint32_t effective_n, uint32_t effective_k, 
                      uint32_t i, uint32_t j, bool first_iteration) {
     if (me() == 1) {
-        while (!(input_buffer_states[input_buffer] == COMPUTE && result_buffer_state[result_buffer] == COMPUTE)) {
-            ;
+        switch (input_buffer) {
+            case 0:
+                sem_take(&input_ready_1);
+                break;
+            case 1:
+                sem_take(&input_ready_2);
+                break;
+        }
+        switch (result_buffer) {
+            case 0:
+                sem_take(&result_ready_1);
+                break;
+            case 1:
+                sem_take(&result_ready_2);
+                break;
         }
         if (first_iteration) {
             result_i[result_buffer] = i;
@@ -196,17 +216,23 @@ void compute_tasklet(uint32_t input_buffer, uint32_t result_buffer,
         mutex_lock(status_mutex);
         input_buffer_states[input_buffer] = DMA;
         mutex_unlock(status_mutex);
+        sem_give(&dma_request);
+        switch (result_buffer) {
+            case 0:
+                sem_give(&result_ready_1);
+                break;
+            case 1:
+                sem_give(&result_ready_2);
+                break;
+        }
     }
 }
 
 bool dma_tasklet(uint32_t next_i, uint32_t next_j, uint32_t next_k,
                  int input_buffer_index, int output_buffer_index) {
     bool loaded_next = false;
-    while (!(input_buffer_states[0] == DMA) && !(input_buffer_states[1] == DMA) && !(result_buffer_state[0] == DMA) && !(result_buffer_state[1] == DMA)) {
-        ;
-    }
+    sem_take(&dma_request);
     if (input_buffer_states[input_buffer_index] == DMA) {
-        // Load new tiles into input_load_buffer
         __mram_ptr void *mram_addr_A = (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.matrix1_start_offset + DPU_MRAM_HEAP_POINTER + 
             (next_i * matrix1_tiles_colwise + next_k) * matrix1_tile_size_bytes);
         load_A_tile_from_mram(mram_addr_A, matrix1_wram[input_buffer_index], 
@@ -219,6 +245,14 @@ bool dma_tasklet(uint32_t next_i, uint32_t next_j, uint32_t next_k,
         input_buffer_states[input_buffer_index] = COMPUTE;
         loaded_next = true;
         mutex_unlock(status_mutex);
+        switch (input_buffer_index) {
+            case 0:
+                sem_give(&input_ready_1);
+                break;
+            case 1:
+                sem_give(&input_ready_2);
+                break;
+        }
         #ifdef DEBUG
         printf("[DPU %d] Loaded tiles A(%d, %d) and B(%d, %d) into WRAM\n", me(), next_i, next_k, next_j, next_k);
         #endif
@@ -230,6 +264,14 @@ bool dma_tasklet(uint32_t next_i, uint32_t next_j, uint32_t next_k,
         mutex_lock(status_mutex);
         result_buffer_state[output_buffer_index] = COMPUTE;
         mutex_unlock(status_mutex);
+        switch (output_buffer_index) {
+            case 0:
+                sem_give(&result_ready_1);
+                break;
+            case 1:
+                sem_give(&result_ready_2);
+                break;
+        }
         #ifdef DEBUG
         printf("[DPU %d] Completed writing result tile C(%d, %d) to MRAM\n", me(), result_i[output_buffer_index], result_j[output_buffer_index]);
         #endif
@@ -337,7 +379,6 @@ int main() {
     uint32_t last_k_tile_k = MATRIX_MULTIPLY_ARGUMENTS.matrix1_original_cols % MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
     if (last_k_tile_k == 0) last_k_tile_k = MATRIX_MULTIPLY_ARGUMENTS.matrix1_tile_cols;
 
-
     barrier_wait(&main_barrier);
 
     int input_compute_buffer = 0;
@@ -383,8 +424,11 @@ int main() {
             for (int j = 0; j < result_tiles_colwise; j++) {
                 for (int k = 0; k < matrix1_tiles_colwise; k++) {
                     bool result = dma_tasklet(i, j, k, input_dma_buffer, result_dma_buffer);
-                    if (!result)
+                    if (!result) {
                         k--;
+                        sem_give(&dma_request);
+                        continue;
+                    }
                     input_dma_buffer = 1 - input_dma_buffer;
                     result_dma_buffer = 1 - result_dma_buffer;
                 }
@@ -394,9 +438,12 @@ int main() {
 
     barrier_wait(&main_barrier);
 
-    dma_tasklet(result_tiles_rowwise-1, result_tiles_colwise-1, matrix1_tiles_colwise-1, 0, 0);
-    dma_tasklet(result_tiles_rowwise-1, result_tiles_colwise-1, matrix1_tiles_colwise-1, 0, 1);
-
+    if (pid == 0) {
+        sem_give(&dma_request);
+        dma_tasklet(result_tiles_rowwise-1, result_tiles_colwise-1, matrix1_tiles_colwise-1, 0, 0);
+        sem_give(&dma_request);
+        dma_tasklet(result_tiles_rowwise-1, result_tiles_colwise-1, matrix1_tiles_colwise-1, 0, 1);
+    }
 #ifdef DEBUG
     if (pid == 0) {
         printf("[DPU %d] Matrix multiplication kernel completed successfully\n", pid);
