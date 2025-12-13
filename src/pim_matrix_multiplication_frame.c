@@ -401,7 +401,6 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.result_tile_rows = frame->result_tile_rows;
     input_args.result_tile_cols = frame->result_tile_cols;
     
-    // Set original (unpadded) dimensions for boundary checking
     input_args.matrix1_original_rows = matrix1_split_rows;
     input_args.matrix1_original_cols = frame->matrix1_cols;
     input_args.matrix2_original_rows = frame->matrix2_rows;
