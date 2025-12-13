@@ -414,6 +414,14 @@ int main() {
                     mutex_lock(status_mutex);
                     result_buffer_state[result_compute_buffer] = DMA;
                     mutex_unlock(status_mutex);
+                    switch (result_compute_buffer) {
+                        case 0:
+                            sem_take(&result_ready_1);
+                            break;
+                        case 1:
+                            sem_take(&result_ready_2);
+                            break;
+                    }
                 }
                 result_compute_buffer = 1 - result_compute_buffer;
                 barrier_wait(&compute_barrier);
