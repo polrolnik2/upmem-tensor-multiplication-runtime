@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # DPU counts to test
-DPU_COUNTS=(1 25 100 225 400 625)
+DPU_COUNTS=(1 25 100 225 400 484)
 
 LOG_DIR_HOST="${ROOT}/scratch/runtime_logs/strong_scaling"
 BIN_HOST="${ROOT}/bin/test_from_file"
