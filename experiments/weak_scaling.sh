@@ -4,6 +4,13 @@ set -euo pipefail
 # Usage: weak_scaling.sh [DIRECTORY]
 # Loops through immediate subdirectories of DIRECTORY (default: current dir)
 
+# Resolve project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${SCRIPT_DIR}"
+
+# Resolve CMake build directory (default to 'build' subdirectory of ROOT)
+CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR:-${ROOT}/build}"
+
 test1=("/home/unipoznan/workspace/pim-matmul-benchmarks/scratch/references/class_m-11675_k-11675_n-11675" 25)
 test2=("/home/unipoznan/workspace/pim-matmul-benchmarks/scratch/references/class_m-17438_k-17438_n-17438" 100)
 test3=("/home/unipoznan/workspace/pim-matmul-benchmarks/scratch/references/class_m-21673_k-21673_n-21673" 225)
@@ -22,8 +29,8 @@ for entry in "${directory_list[@]}"; do
     ls $dir | \
     while read -r pair_dir; do
         full_pair_dir="${dir}/${pair_dir}"
-        mkdir -p scratch/runtime_logs/weak_scaling/logs/dpus-"${dpus}"
+        mkdir -p "${ROOT}/scratch/runtime_logs/weak_scaling/logs/dpus-${dpus}"
         echo "Checking directory: $full_pair_dir"
-        ./bin/test_from_file "${full_pair_dir}/A_matrix.txt" "${full_pair_dir}/B_matrix.txt" --dpus "${dpus}" --reference-file "${full_pair_dir}/Q.txt" > scratch/runtime_logs/weak_scaling/logs/dpus-"${dpus}"/"${pair_dir}".log 2>&1
+        "${CMAKE_BINARY_DIR}/bin/test_from_file" "${full_pair_dir}/A_matrix.txt" "${full_pair_dir}/B_matrix.txt" --dpus "${dpus}" --reference-file "${full_pair_dir}/Q.txt" > "${ROOT}/scratch/runtime_logs/weak_scaling/logs/dpus-${dpus}/${pair_dir}.log" 2>&1
     done
 done

@@ -14,11 +14,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# Resolve CMake build directory (default to 'build' subdirectory of ROOT)
+CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR:-${ROOT}/build}"
+
 # DPU counts to test
 DPU_COUNTS=(1 25 100 225 400 484)
 
 LOG_DIR_HOST="${ROOT}/scratch/runtime_logs/strong_scaling"
-BIN_HOST="${ROOT}/bin/test_from_file"
+BIN_HOST="${CMAKE_BINARY_DIR}/bin/test_from_file"
 REF_DIR_BASE="${ROOT}/scratch/references"
 
 mkdir -p "${LOG_DIR_HOST}"
