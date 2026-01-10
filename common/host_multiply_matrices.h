@@ -3,7 +3,7 @@
 
 Matrix* host_multiply_matrices(const Matrix* matrix1, const Matrix* matrix2) {
     if (!matrix1 || !matrix2 || matrix1->cols != matrix2->rows) return NULL;
-    int16_t * result_data_row_major = malloc(matrix1->rows * matrix2->cols * sizeof(uint16_t));
+    int16_t * result_data_row_major = (int16_t *)(matrix1->rows * matrix2->cols * sizeof(uint16_t));
     if (!result_data_row_major) return NULL;
     for (int i = 0; i < matrix1->rows; i++) {
         for (int j = 0; j < matrix2->cols; j++) {
