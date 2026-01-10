@@ -42,8 +42,9 @@ services:
       /bin/bash -c "
       source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator &&
       source /workspace/source.me &&
-      make -C /workspace/tests all &&
-      echo 'Build completed successfully'
+      mkdir -p /workspace/build/ &&
+      cmake -S /workspace/ -B /workspace/build/ &&
+      make -C /workspace/build/ all
       "
 
   # Unit test target - runs all tests
@@ -67,7 +68,11 @@ services:
       /bin/bash -c "
       source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator &&
       source /workspace/source.me &&
-      make -C /workspace/ run-unittests
+      mkdir -p /workspace/build/ &&
+      cmake -S /workspace/ -B /workspace/build/ &&
+      make -C /workspace/build/ tests &&
+      ctest --output-on-failure -C Debug -V -E integration &&
+      echo 'All unit tests passed successfully'
       "
 
 volumes:
