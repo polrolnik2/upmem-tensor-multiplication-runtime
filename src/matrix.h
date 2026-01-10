@@ -13,6 +13,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Matrix struct representing a 2D matrix of any data type.
  *
@@ -264,5 +268,9 @@ Matrix* matrix_transpose(const Matrix* mat);
 
 #define MATRIX_SET_TYPED(mat, r, c, value, type) \
     ({ type temp = (value); matrix_set(mat, r, c, &temp); })
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // MATRIX_H

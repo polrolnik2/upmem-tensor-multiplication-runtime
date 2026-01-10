@@ -3,6 +3,10 @@
 
 #include <dpu.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     uint32_t num_work_groups;
     uint32_t work_group_size;
@@ -117,5 +121,10 @@ Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_fr
  * @param frame Pointer to the PIM matrix multiplication frame to free.
  */
 void pim_matrix_multiplication_frame_free(pim_matrix_multiplication_frame_t* frame);
+
+#ifdef __cplusplus
+}
+#endif
+
 
 #endif // __PIM_MATRIX_MULTIPLICATION_FRAME_H___
