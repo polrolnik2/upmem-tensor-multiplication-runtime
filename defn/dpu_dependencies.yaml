@@ -1,8 +1,0 @@
-# Project build dependencies for compilation
-# List all C source files (relative to project root) that should be compiled/linked
-
-sources:
-  - /src/dpu/pim_dpu_matrix_multiply_thread.c
-  
-include_dirs:
-  - src/dpu/
