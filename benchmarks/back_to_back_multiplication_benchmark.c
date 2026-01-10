@@ -192,7 +192,10 @@ int main(int argc, char **argv) {
 		printf("  Execute multiplication 1: %.3f ms\n", time_exec1[iter]);
 
 		// Get first result and prepare for next multiplication
+        startTimer(&timer);
 		Matrix *result1 = pim_matrix_multiplication_frame_get_result(frame);
+        stopTimer(&timer);
+        printf("  Retrieve result 1:      %.3f ms\n", getElapsedTime(timer));
 		if (!result1) {
 			fprintf(stderr, "Failed to get result from first multiplication\n");
 			free(time_load1); free(time_exec1); free(time_transfer); free(time_exec2);
@@ -218,7 +221,10 @@ int main(int argc, char **argv) {
 		printf("  Execute multiplication 2: %.3f ms\n", time_exec2[iter]);
 
 		// Get second result
+        startTimer(&timer);
 		Matrix *result2 = pim_matrix_multiplication_frame_get_result(frame);
+        stopTimer(&timer);
+        printf("  Retrieve result 2:      %.3f ms\n", getElapsedTime(timer));
 		if (!result2) {
 			fprintf(stderr, "Failed to get result from second multiplication\n");
 			free(time_load1); free(time_exec1); free(time_transfer); free(time_exec2);
@@ -227,7 +233,7 @@ int main(int argc, char **argv) {
 			matrix_free(result1);
 			return 1;
 		}
-
+        
 		// Free results
 		matrix_free(result1);
 		matrix_free(result2);
