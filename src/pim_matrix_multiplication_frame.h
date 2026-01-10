@@ -49,13 +49,39 @@ typedef struct {
  * @param matrix1_type_size Size of each element in the first matrix.
  * @param matrix2_type_size Size of each element in the second matrix.
  * @param result_type_size Size of each element in the result matrix.
+ * @param dpu_binary_path Path to the DPU kernel binary to load.
  * @return Pointer to the new frame, or NULL on failure.
  */
-pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32_t num_dpus, uint32_t dpu_offset, 
+pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame_binary(uint32_t num_dpus, uint32_t dpu_offset, 
                                                                         uint32_t matrix1_rows, uint32_t matrix1_cols,
                                                                         uint32_t matrix2_rows, uint32_t matrix2_cols,
                                                                         uint32_t result_rows, uint32_t result_cols,
-                                                                        uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size);
+                                                                        uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size,
+                                                                        const char* dpu_binary_path);
+
+/**
+ * @brief Create a new PIM matrix multiplication frame - a structure for managing
+ *        the state and data of a matrix multiplication operation on a PIM architecture.
+ * @details This function allocates memory for the frame, initializes how the matrices should be split to optimize the memory utilization. It uses a default DPU binary path.
+ * @param num_dpus Number of DPUs to use.
+ * @param dpu_offset Offset for DPU memory.
+ * @param matrix1_rows Number of rows in the first matrix.
+ * @param matrix1_cols Number of columns in the first matrix.
+ * @param matrix2_rows Number of rows in the second matrix.
+ * @param matrix2_cols Number of columns in the second matrix.
+ * @param result_rows Number of rows in the result matrix.
+ * @param result_cols Number of columns in the result matrix.
+ * @param matrix1_type_size Size of each element in the first matrix.
+ * @param matrix2_type_size Size of each element in the second matrix.
+ * @param result_type_size Size of each element in the result matrix.
+ * @return Pointer to the new frame, or NULL on failure.
+ */
+pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(
+    uint32_t num_dpus, uint32_t dpu_offset, 
+    uint32_t matrix1_rows, uint32_t matrix1_cols,
+    uint32_t matrix2_rows, uint32_t matrix2_cols,
+    uint32_t result_rows, uint32_t result_cols,
+    uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size);
 
 /**
  * @brief Load the first matrix (Left side of the multiplication) into the frame.

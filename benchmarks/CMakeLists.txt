@@ -1,0 +1,3 @@
+add_executable(test_from_file test_from_file.c)
+target_link_libraries(test_from_file PRIVATE pim_matmul)
+add_dependencies(test_from_file dpu_kernel)

@@ -113,13 +113,20 @@ static void find_optimal_work_group_config(uint32_t num_dpus, uint32_t matrix1_s
     *work_group_size = best_work_group_size;
 }
 
-pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32_t num_dpus, uint32_t dpu_offset,
+pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame_binary(uint32_t num_dpus, uint32_t dpu_offset,
                                                                         uint32_t matrix1_rows, uint32_t matrix1_cols,
                                                                         uint32_t matrix2_rows, uint32_t matrix2_cols,
                                                                         uint32_t result_rows, uint32_t result_cols,
-                                                                        uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size) {
+                                                                        uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size,
+                                                                        const char* dpu_binary_path) {
     pim_matrix_multiplication_frame_t* frame = (pim_matrix_multiplication_frame_t*)malloc(sizeof(pim_matrix_multiplication_frame_t));
     if (!frame) {
+        return NULL;
+    }
+
+    if (!dpu_binary_path) {
+        fprintf(stderr, "DPU binary path cannot be NULL\n");
+        free(frame);
         return NULL;
     }
 
@@ -233,8 +240,7 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
 
     frame->result_valid = false;
 
-    const char* dpu_binary = "/workspace/bin/matrix_multiply_dpu";
-    DPU_ASSERT(dpu_load(frame->dpu_set, dpu_binary, NULL));
+    DPU_ASSERT(dpu_load(frame->dpu_set, dpu_binary_path, NULL));
 
     return frame;
 }
@@ -742,4 +748,21 @@ cleanup:
     if (submatrices_row_populated) free(submatrices_row_populated);
     
     return NULL;
+}
+
+pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(
+    uint32_t num_dpus, uint32_t dpu_offset, 
+    uint32_t matrix1_rows, uint32_t matrix1_cols,
+    uint32_t matrix2_rows, uint32_t matrix2_cols,
+    uint32_t result_rows, uint32_t result_cols,
+    uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size) {
+    #ifndef PIM_MATMUL_DPU_BINARY_PATH
+    #error "PIM_MATMUL_DPU_BINARY_PATH not defined. Define it at compile time via -DPIM_MATMUL_DPU_BINARY_PATH=<path>"
+    #endif
+    return create_pim_matrix_multiplication_frame_binary(num_dpus, dpu_offset,
+                                                  matrix1_rows, matrix1_cols,
+                                                  matrix2_rows, matrix2_cols,
+                                                  result_rows, result_cols,
+                                                  matrix1_type_size, matrix2_type_size, result_type_size,
+                                                  PIM_MATMUL_DPU_BINARY_PATH);
 }
