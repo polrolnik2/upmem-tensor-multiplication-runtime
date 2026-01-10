@@ -1,3 +1,7 @@
 add_executable(test_from_file test_from_file.c)
 target_link_libraries(test_from_file PRIVATE pim_matmul)
 add_dependencies(test_from_file dpu_kernel)
+
+add_executable(back_to_back_multiplication_benchmark back_to_back_multiplication_benchmark.c)
+target_link_libraries(back_to_back_multiplication_benchmark PRIVATE pim_matmul)
+add_dependencies(back_to_back_multiplication_benchmark dpu_kernel)
