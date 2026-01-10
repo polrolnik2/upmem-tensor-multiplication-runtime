@@ -6,7 +6,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: dev
     image: pim-matmul-dev:latest
     platform: linux/amd64
     container_name: pim-matmul-dev
@@ -27,8 +26,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: build
-    image: pim-matmul-build:latest
+    image: pim-matmul-dev:latest
     platform: linux/amd64
     container_name: pim-matmul-build
     volumes:
@@ -53,8 +51,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: unittest
-    image: pim-matmul-unittest:latest
+    image: pim-matmul-dev:latest
     platform: linux/amd64
     container_name: pim-matmul-unittest
     volumes:
@@ -70,16 +67,7 @@ services:
       /bin/bash -c "
       source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator &&
       source /workspace/source.me &&
-      make -C /workspace/tests all &&
-      echo 'Running unit tests...' &&
-      cd /workspace &&
-      for test in bin/*test*; do
-        if [ -x \"\$test\" ]; then
-          echo \"Running \$test...\" &&
-          \"\$test\" || exit 1;
-        fi
-      done &&
-      echo 'All tests passed successfully'
+      make -C /workspace/ run-unittests
       "
 
 volumes:

@@ -49,30 +49,5 @@ fi
 BASH
 SHELL ["/bin/bash", "-c"]
 
-# Development stage - full environment for interactive development
-FROM base AS dev
-COPY . /workspace
-CMD ["/bin/bash"]
-
-# Build stage - compiles the project
-FROM base AS build
-COPY . /workspace
-RUN bash -c "source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator && \
-    source /workspace/source.me && \
-    make -C /workspace/tests all"
-CMD ["/bin/bash", "-c", "echo 'Build stage - binaries ready in /workspace/bin'"]
-
-# Unit test stage - runs all tests
-FROM build AS unittest
-RUN bash -c "source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator && \
-    source /workspace/source.me && \
-    cd /workspace && \
-    for test in bin/*test*; do \
-        if [ -x \"\$test\" ]; then \
-            echo \"Running \$test...\" && \
-            \"\$test\" || exit 1; \
-        fi \
-    done && \
-    echo 'All tests passed successfully'"
 CMD ["/bin/bash"]
 

@@ -4,7 +4,6 @@ DOCKER_IMAGE := pim-matmul-dev
 help:
 	@echo "Available targets:"
 	@echo "  make docker-build - Build the Docker image"
-	@echo "  make SimplePIM - Clone SimplePIM library if not present"
 	@echo "  make build-dpu - Build DPU binaries"
 	@echo "  make run-unittests - Run unittests in Docker"
 	@echo "  make clean - Clean up build artifacts"
@@ -44,7 +43,6 @@ CFLAGS += -DTIMER
 endif
 
 clean:
-	rm -rf lib/simplepim
 	rm -rf $(BIN_DIR)
 	rm -rf $(PIM_MATMUL_BENCHMARKS_ROOT)/scratch/
 	rm -rf $(DOCS_DIR)
