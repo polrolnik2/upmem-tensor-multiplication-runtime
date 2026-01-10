@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Development environment with full project mounted
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    image: pim-matmul-dev:latest
+    platform: linux/amd64
+    container_name: pim-matmul-dev
+    volumes:
+      - .:/workspace
+      - /workspace/.venv  # Prevent mounting venv from host
+    working_dir: /workspace
+    environment:
+      - PIM_MATMUL_BENCHMARKS_ROOT=/workspace
+      - PKG_CONFIG_PATH=/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig
+      - LD_LIBRARY_PATH=/opt/upmem-2023.2.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+  # Build target - compiles the project
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    image: pim-matmul-build:latest
+    platform: linux/amd64
+    container_name: pim-matmul-build
+    volumes:
+      - .:/workspace
+      - build-cache:/workspace/build
+      - bin-cache:/workspace/bin
+    working_dir: /workspace
+    environment:
+      - PIM_MATMUL_BENCHMARKS_ROOT=/workspace
+      - PKG_CONFIG_PATH=/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig
+      - LD_LIBRARY_PATH=/opt/upmem-2023.2.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
+    command: >
+      /bin/bash -c "
+      source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator &&
+      source /workspace/source.me &&
+      make -C /workspace/tests all &&
+      echo 'Build completed successfully'
+      "
+
+  # Unit test target - runs all tests
+  unittest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: unittest
+    image: pim-matmul-unittest:latest
+    platform: linux/amd64
+    container_name: pim-matmul-unittest
+    volumes:
+      - .:/workspace
+      - build-cache:/workspace/build
+      - bin-cache:/workspace/bin
+    working_dir: /workspace
+    environment:
+      - PIM_MATMUL_BENCHMARKS_ROOT=/workspace
+      - PKG_CONFIG_PATH=/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig
+      - LD_LIBRARY_PATH=/opt/upmem-2023.2.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
+    command: >
+      /bin/bash -c "
+      source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator &&
+      source /workspace/source.me &&
+      make -C /workspace/tests all &&
+      echo 'Running unit tests...' &&
+      cd /workspace &&
+      for test in bin/*test*; do
+        if [ -x \"\$test\" ]; then
+          echo \"Running \$test...\" &&
+          \"\$test\" || exit 1;
+        fi
+      done &&
+      echo 'All tests passed successfully'
+      "
+
+volumes:
+  build-cache:
+  bin-cache:
