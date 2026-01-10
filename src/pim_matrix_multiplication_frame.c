@@ -39,6 +39,43 @@ uint32_t get_result_tile_size_bytes(const pim_matrix_multiplication_frame_t* fra
     return frame->result_tile_rows * frame->result_tile_cols * frame->result_type_size;
 }
 
+static inline uint32_t align_up(uint32_t value, uint32_t multiple) {
+    if (multiple == 0) return value;
+    uint32_t remainder = value % multiple;
+    return remainder == 0 ? value : value + (multiple - remainder);
+}
+
+static inline uint32_t align_rows_to_work_group(uint32_t rows, uint32_t work_group_size) {
+    return align_up(rows, work_group_size);
+}
+
+static inline uint32_t align_cols_to_work_group(uint32_t cols, uint32_t num_groups) {
+    return align_up(cols, num_groups);
+}
+
+static inline uint32_t align_rows_to_8bytes(uint32_t rows, uint32_t element_size) {
+    return rows + calculate_pad_rows(rows, element_size);
+}
+
+static inline uint32_t align_cols_to_8bytes(uint32_t cols, uint32_t element_size) {
+    return cols + calculate_pad_cols(cols, element_size);
+}
+
+static inline uint32_t align_dim_to_tile(uint32_t dim, uint32_t tile) {
+    return align_up(dim, tile);
+}
+
+static inline void compute_tile_counts(uint32_t rows, uint32_t cols, uint32_t tile_rows, uint32_t tile_cols,
+                                       uint32_t* num_row_tiles, uint32_t* num_col_tiles) {
+    *num_row_tiles = (rows + tile_rows - 1) / tile_rows;
+    *num_col_tiles = (cols + tile_cols - 1) / tile_cols;
+}
+
+static inline uint32_t tiled_buffer_size_bytes(uint32_t num_row_tiles, uint32_t num_col_tiles,
+                                               uint32_t tile_rows, uint32_t tile_cols, uint32_t element_size) {
+    return num_row_tiles * num_col_tiles * tile_rows * tile_cols * element_size;
+}
+
 Matrix * matrix_align(const Matrix *mat) {
     if (!mat) return NULL;
     int32_t pad_rows = calculate_pad_rows(mat->rows, mat->element_size);
@@ -136,43 +173,55 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(uint32
     frame->matrix1_start_offset = curr_offset;
 
     // Matrix1 memory layout calculation with tiling
-    uint32_t matrix1_rows_aligned = matrix1_rows + (frame->work_group_size - (matrix1_rows % frame->work_group_size)) % frame->work_group_size;
+    uint32_t matrix1_rows_aligned = align_rows_to_work_group(matrix1_rows, frame->work_group_size);
     uint32_t matrix1_split_rows = matrix1_rows_aligned / frame->work_group_size;
-    uint32_t matrix1_rows_8byte_aligned = matrix1_split_rows + calculate_pad_rows(matrix1_split_rows, frame->matrix1_type_size);
-    uint32_t matrix1_rows_tile_aligned = matrix1_rows_8byte_aligned + ((frame->matrix1_tile_rows - (matrix1_rows_8byte_aligned % frame->matrix1_tile_rows)) % frame->matrix1_tile_rows);
+    uint32_t matrix1_rows_8byte_aligned = align_rows_to_8bytes(matrix1_split_rows, frame->matrix1_type_size);
+    uint32_t matrix1_rows_tile_aligned = align_dim_to_tile(matrix1_rows_8byte_aligned, frame->matrix1_tile_rows);
     
-    uint32_t matrix1_cols_8byte_aligned = matrix1_cols + calculate_pad_cols(matrix1_cols, frame->matrix1_type_size);
-    uint32_t matrix1_cols_tile_aligned = matrix1_cols_8byte_aligned + ((frame->matrix1_tile_cols - (matrix1_cols_8byte_aligned % frame->matrix1_tile_cols)) % frame->matrix1_tile_cols);
+    uint32_t matrix1_cols_8byte_aligned = align_cols_to_8bytes(matrix1_cols, frame->matrix1_type_size);
+    uint32_t matrix1_cols_tile_aligned = align_dim_to_tile(matrix1_cols_8byte_aligned, frame->matrix1_tile_cols);
     
     // Calculate tiled size for matrix1
-    uint32_t matrix1_num_row_tiles = (matrix1_rows_tile_aligned + frame->matrix1_tile_rows - 1) / frame->matrix1_tile_rows;
-    uint32_t matrix1_num_col_tiles = (matrix1_cols_tile_aligned + frame->matrix1_tile_cols - 1) / frame->matrix1_tile_cols;
-    uint32_t matrix1_size_aligned = matrix1_num_row_tiles * matrix1_num_col_tiles * frame->matrix1_tile_rows * frame->matrix1_tile_cols * matrix1_type_size;
+    uint32_t matrix1_num_row_tiles, matrix1_num_col_tiles;
+    compute_tile_counts(matrix1_rows_tile_aligned, matrix1_cols_tile_aligned,
+                        frame->matrix1_tile_rows, frame->matrix1_tile_cols,
+                        &matrix1_num_row_tiles, &matrix1_num_col_tiles);
+    uint32_t matrix1_size_aligned = tiled_buffer_size_bytes(matrix1_num_row_tiles, matrix1_num_col_tiles,
+                                                           frame->matrix1_tile_rows, frame->matrix1_tile_cols,
+                                                           matrix1_type_size);
     curr_offset += matrix1_size_aligned;
     frame->matrix2_start_offset = curr_offset;
 
     // Matrix2 memory layout calculation with tiling
-    uint32_t matrix2_cols_aligned = matrix2_cols + (frame->num_work_groups - (matrix2_cols % frame->num_work_groups)) % frame->num_work_groups;
+    uint32_t matrix2_cols_aligned = align_cols_to_work_group(matrix2_cols, frame->num_work_groups);
     uint32_t matrix2_split_cols = matrix2_cols_aligned / frame->num_work_groups;
-    uint32_t matrix2_cols_8byte_aligned = matrix2_split_cols + calculate_pad_cols(matrix2_split_cols, frame->matrix2_type_size);
-    uint32_t matrix2_cols_tile_aligned = matrix2_cols_8byte_aligned + ((frame->matrix2_tile_cols - (matrix2_cols_8byte_aligned % frame->matrix2_tile_cols)) % frame->matrix2_tile_cols);
+    uint32_t matrix2_cols_8byte_aligned = align_cols_to_8bytes(matrix2_split_cols, frame->matrix2_type_size);
+    uint32_t matrix2_cols_tile_aligned = align_dim_to_tile(matrix2_cols_8byte_aligned, frame->matrix2_tile_cols);
     
-    uint32_t matrix2_rows_8byte_aligned = matrix2_rows + calculate_pad_rows(matrix2_rows, frame->matrix2_type_size);
-    uint32_t matrix2_rows_tile_aligned = matrix2_rows_8byte_aligned + ((frame->matrix2_tile_rows - (matrix2_rows_8byte_aligned % frame->matrix2_tile_rows)) % frame->matrix2_tile_rows);
+    uint32_t matrix2_rows_8byte_aligned = align_rows_to_8bytes(matrix2_rows, frame->matrix2_type_size);
+    uint32_t matrix2_rows_tile_aligned = align_dim_to_tile(matrix2_rows_8byte_aligned, frame->matrix2_tile_rows);
     
     // Calculate tiled size for matrix2  
-    uint32_t matrix2_num_row_tiles = (matrix2_rows_tile_aligned + frame->matrix2_tile_rows - 1) / frame->matrix2_tile_rows;
-    uint32_t matrix2_num_col_tiles = (matrix2_cols_tile_aligned + frame->matrix2_tile_cols - 1) / frame->matrix2_tile_cols;
-    uint32_t matrix2_size_aligned = matrix2_num_row_tiles * matrix2_num_col_tiles * frame->matrix2_tile_rows * frame->matrix2_tile_cols * matrix2_type_size;
+    uint32_t matrix2_num_row_tiles, matrix2_num_col_tiles;
+    compute_tile_counts(matrix2_rows_tile_aligned, matrix2_cols_tile_aligned,
+                        frame->matrix2_tile_rows, frame->matrix2_tile_cols,
+                        &matrix2_num_row_tiles, &matrix2_num_col_tiles);
+    uint32_t matrix2_size_aligned = tiled_buffer_size_bytes(matrix2_num_row_tiles, matrix2_num_col_tiles,
+                                                           frame->matrix2_tile_rows, frame->matrix2_tile_cols,
+                                                           matrix2_type_size);
     curr_offset += matrix2_size_aligned;
     frame->result_start_offset = curr_offset;
 
     // Result memory layout calculation with tiling
     uint32_t result_rows_tile_aligned = matrix1_rows_tile_aligned;
     uint32_t result_cols_tile_aligned = matrix2_cols_tile_aligned;
-    uint32_t result_num_row_tiles = result_rows_tile_aligned / frame->result_tile_rows;
-    uint32_t result_num_col_tiles = result_cols_tile_aligned / frame->result_tile_cols;
-    uint32_t result_size_aligned = result_num_row_tiles * result_num_col_tiles * frame->result_tile_rows * frame->result_tile_cols * frame->result_type_size;
+    uint32_t result_num_row_tiles, result_num_col_tiles;
+    compute_tile_counts(result_rows_tile_aligned, result_cols_tile_aligned,
+                        frame->result_tile_rows, frame->result_tile_cols,
+                        &result_num_row_tiles, &result_num_col_tiles);
+    uint32_t result_size_aligned = tiled_buffer_size_bytes(result_num_row_tiles, result_num_col_tiles,
+                                                          frame->result_tile_rows, frame->result_tile_cols,
+                                                          frame->result_type_size);
     curr_offset += result_size_aligned / frame->num_dpus;
     frame->mem_frame_end = curr_offset;
 
@@ -205,7 +254,8 @@ void pim_matrix_multiplication_frame_load_first_matrix(pim_matrix_multiplication
     bool *submatrices_data_populated = NULL;
     
     // Load first matrix into MRAM at the specified offset
-    uint32_t aligned_rows = (frame->work_group_size - (frame->matrix1_rows % frame->work_group_size)) % frame->work_group_size;
+    uint32_t matrix1_rows_wg_aligned = align_rows_to_work_group(frame->matrix1_rows, frame->work_group_size);
+    uint32_t aligned_rows = matrix1_rows_wg_aligned - frame->matrix1_rows;
     matrix_split_aligned = matrix_add_rows(matrix, aligned_rows, NULL);
     if (!matrix_split_aligned) {
         fprintf(stderr, "Failed to align matrix rows for PIM frame\n");
@@ -258,9 +308,13 @@ void pim_matrix_multiplication_frame_load_first_matrix(pim_matrix_multiplication
     // Calculate tiled size: need to account for tiles that may have padding
     uint32_t matrix_rows = submatrices[0]->rows;
     uint32_t matrix_cols = submatrices[0]->cols;
-    uint32_t num_row_tiles = (matrix_rows + frame->matrix1_tile_rows - 1) / frame->matrix1_tile_rows;
-    uint32_t num_col_tiles = (matrix_cols + frame->matrix1_tile_cols - 1) / frame->matrix1_tile_cols;
-    uint32_t submatrix_size = num_row_tiles * num_col_tiles * frame->matrix1_tile_rows * frame->matrix1_tile_cols * frame->matrix1_type_size;
+    uint32_t num_row_tiles, num_col_tiles;
+    compute_tile_counts(matrix_rows, matrix_cols,
+                        frame->matrix1_tile_rows, frame->matrix1_tile_cols,
+                        &num_row_tiles, &num_col_tiles);
+    uint32_t submatrix_size = tiled_buffer_size_bytes(num_row_tiles, num_col_tiles,
+                                                     frame->matrix1_tile_rows, frame->matrix1_tile_cols,
+                                                     frame->matrix1_type_size);
     #ifdef DEBUG
     printf("Loading first matrix submatrix size: %u bytes\n", submatrix_size);
     printf("Rows: %u, Cols: %u, Num Row Tiles: %u, Num Col Tiles: %u\n", matrix_rows, matrix_cols, num_row_tiles, num_col_tiles);
@@ -284,7 +338,8 @@ void pim_matrix_multiplication_frame_load_second_matrix(pim_matrix_multiplicatio
     bool *submatrices_data_populated = NULL;
     
     // Load second matrix into MRAM at the specified offset
-    uint32_t aligned_cols = (frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups;
+    uint32_t matrix2_cols_wg_aligned = align_cols_to_work_group(frame->matrix2_cols, frame->num_work_groups);
+    uint32_t aligned_cols = matrix2_cols_wg_aligned - frame->matrix2_cols;
     matrix_split_aligned = matrix_add_cols(matrix, aligned_cols, NULL);
     if (!matrix_split_aligned) {
         fprintf(stderr, "Failed to align matrix cols for PIM frame\n");
@@ -345,9 +400,13 @@ void pim_matrix_multiplication_frame_load_second_matrix(pim_matrix_multiplicatio
     // Calculate tiled size for matrix2: note that we transposed it, so dimensions are swapped
     uint32_t matrix_rows = submatrices[0]->cols;  // After transpose: cols become rows
     uint32_t matrix_cols = submatrices[0]->rows;  // After transpose: rows become cols  
-    uint32_t num_row_tiles = (matrix_rows + frame->matrix2_tile_cols - 1) / frame->matrix2_tile_cols;  // Note: using tile_cols for rows
-    uint32_t num_col_tiles = (matrix_cols + frame->matrix2_tile_rows - 1) / frame->matrix2_tile_rows;  // Note: using tile_rows for cols
-    uint32_t submatrix_size = num_row_tiles * num_col_tiles * frame->matrix2_tile_rows * frame->matrix2_tile_cols * frame->matrix2_type_size;
+    uint32_t num_row_tiles, num_col_tiles;
+    compute_tile_counts(matrix_rows, matrix_cols,
+                        frame->matrix2_tile_cols, frame->matrix2_tile_rows,
+                        &num_row_tiles, &num_col_tiles);  // Note: using tile_cols for rows, tile_rows for cols
+    uint32_t submatrix_size = tiled_buffer_size_bytes(num_row_tiles, num_col_tiles,
+                                                     frame->matrix2_tile_rows, frame->matrix2_tile_cols,
+                                                     frame->matrix2_type_size);
     #ifdef DEBUG
     printf("Loading first matrix submatrix size: %u bytes\n", submatrix_size);
     printf("Rows: %u, Cols: %u, Num Row Tiles: %u, Num Col Tiles: %u\n", matrix_rows, matrix_cols, num_row_tiles, num_col_tiles);
@@ -370,20 +429,22 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.result_start_offset = frame->result_start_offset;
     
     // Calculate matrix1 dimensions aligned to tile sizes
-    uint32_t matrix1_split_rows = (frame->result_rows + ((frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
-    uint32_t matrix1_rows_8byte_aligned = calculate_pad_rows(matrix1_split_rows, frame->result_type_size) + matrix1_split_rows;
-    input_args.matrix1_rows = matrix1_rows_8byte_aligned + ((frame->matrix1_tile_rows - (matrix1_rows_8byte_aligned % frame->matrix1_tile_rows)) % frame->matrix1_tile_rows);
+    uint32_t matrix1_rows_wg_aligned = align_rows_to_work_group(frame->result_rows, frame->work_group_size);
+    uint32_t matrix1_split_rows = matrix1_rows_wg_aligned / frame->work_group_size;
+    uint32_t matrix1_rows_8byte_aligned = align_rows_to_8bytes(matrix1_split_rows, frame->result_type_size);
+    input_args.matrix1_rows = align_dim_to_tile(matrix1_rows_8byte_aligned, frame->matrix1_tile_rows);
     
-    uint32_t matrix1_cols_8byte_aligned = calculate_pad_cols(frame->matrix1_cols, frame->matrix1_type_size) + frame->matrix1_cols;
-    input_args.matrix1_cols = matrix1_cols_8byte_aligned + ((frame->matrix1_tile_cols - (matrix1_cols_8byte_aligned % frame->matrix1_tile_cols)) % frame->matrix1_tile_cols);
+    uint32_t matrix1_cols_8byte_aligned = align_cols_to_8bytes(frame->matrix1_cols, frame->matrix1_type_size);
+    input_args.matrix1_cols = align_dim_to_tile(matrix1_cols_8byte_aligned, frame->matrix1_tile_cols);
     
     // Calculate matrix2 dimensions aligned to tile sizes
-    uint32_t matrix2_rows_8byte_aligned = calculate_pad_rows(frame->matrix2_rows, frame->matrix2_type_size) + frame->matrix2_rows;
-    input_args.matrix2_rows = matrix2_rows_8byte_aligned + ((frame->matrix2_tile_rows - (matrix2_rows_8byte_aligned % frame->matrix2_tile_rows)) % frame->matrix2_tile_rows);
+    uint32_t matrix2_rows_8byte_aligned = align_rows_to_8bytes(frame->matrix2_rows, frame->matrix2_type_size);
+    input_args.matrix2_rows = align_dim_to_tile(matrix2_rows_8byte_aligned, frame->matrix2_tile_rows);
     
-    uint32_t matrix2_split_cols = (frame->matrix2_cols + ((frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
-    uint32_t matrix2_cols_8byte_aligned = calculate_pad_cols(matrix2_split_cols, frame->result_type_size) + matrix2_split_cols;
-    input_args.matrix2_cols = matrix2_cols_8byte_aligned + ((frame->matrix2_tile_cols - (matrix2_cols_8byte_aligned % frame->matrix2_tile_cols)) % frame->matrix2_tile_cols);
+    uint32_t matrix2_cols_wg_aligned = align_cols_to_work_group(frame->matrix2_cols, frame->num_work_groups);
+    uint32_t matrix2_split_cols = matrix2_cols_wg_aligned / frame->num_work_groups;
+    uint32_t matrix2_cols_8byte_aligned = align_cols_to_8bytes(matrix2_split_cols, frame->result_type_size);
+    input_args.matrix2_cols = align_dim_to_tile(matrix2_cols_8byte_aligned, frame->matrix2_tile_cols);
     
     // Result dimensions should match the aligned matrix dimensions
     input_args.result_rows = input_args.matrix1_rows;
@@ -452,21 +513,27 @@ Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_fr
     Matrix **row_submatrices = NULL;
     Matrix *result = NULL;
     
-    uint32_t result_rows_frame_aligned = (frame->result_rows + ((frame->work_group_size - (frame->result_rows % frame->work_group_size)) % frame->work_group_size)) / frame->work_group_size;
-    uint32_t result_cols_frame_aligned = (frame->matrix2_cols + ((frame->num_work_groups - (frame->matrix2_cols % frame->num_work_groups)) % frame->num_work_groups)) / frame->num_work_groups;
+    uint32_t result_rows_wg_aligned = align_rows_to_work_group(frame->result_rows, frame->work_group_size);
+    uint32_t result_cols_wg_aligned = align_cols_to_work_group(frame->matrix2_cols, frame->num_work_groups);
+    uint32_t result_rows_frame_aligned = result_rows_wg_aligned / frame->work_group_size;
+    uint32_t result_cols_frame_aligned = result_cols_wg_aligned / frame->num_work_groups;
     
     // First apply 8-byte alignment padding
-    uint32_t result_rows_8byte_aligned = calculate_pad_rows(result_rows_frame_aligned, frame->matrix1_type_size) + result_rows_frame_aligned;
-    uint32_t result_cols_8byte_aligned = calculate_pad_cols(result_cols_frame_aligned, frame->matrix2_type_size) + result_cols_frame_aligned;
+    uint32_t result_rows_8byte_aligned = align_rows_to_8bytes(result_rows_frame_aligned, frame->matrix1_type_size);
+    uint32_t result_cols_8byte_aligned = align_cols_to_8bytes(result_cols_frame_aligned, frame->matrix2_type_size);
     
     // Then ensure dimensions are multiples of tile dimensions for proper tiling
-    uint32_t result_rows_dpu_transfer_aligned = result_rows_8byte_aligned + ((frame->result_tile_rows - (result_rows_8byte_aligned % frame->result_tile_rows)) % frame->result_tile_rows);
-    uint32_t result_cols_dpu_transfer_aligned = result_cols_8byte_aligned + ((frame->result_tile_cols - (result_cols_8byte_aligned % frame->result_tile_cols)) % frame->result_tile_cols);
+    uint32_t result_rows_dpu_transfer_aligned = align_dim_to_tile(result_rows_8byte_aligned, frame->result_tile_rows);
+    uint32_t result_cols_dpu_transfer_aligned = align_dim_to_tile(result_cols_8byte_aligned, frame->result_tile_cols);
     
     // Calculate tiled data size for result transfer
-    uint32_t result_num_row_tiles = result_rows_dpu_transfer_aligned / frame->result_tile_rows;
-    uint32_t result_num_col_tiles = result_cols_dpu_transfer_aligned / frame->result_tile_cols;
-    uint32_t result_size_aligned = result_num_row_tiles * result_num_col_tiles * frame->result_tile_rows * frame->result_tile_cols * frame->result_type_size;
+    uint32_t result_num_row_tiles, result_num_col_tiles;
+    compute_tile_counts(result_rows_dpu_transfer_aligned, result_cols_dpu_transfer_aligned,
+                        frame->result_tile_rows, frame->result_tile_cols,
+                        &result_num_row_tiles, &result_num_col_tiles);
+    uint32_t result_size_aligned = tiled_buffer_size_bytes(result_num_row_tiles, result_num_col_tiles,
+                                                          frame->result_tile_rows, frame->result_tile_cols,
+                                                          frame->result_type_size);
     uint32_t result_submatrices_by_rows = frame->work_group_size;
     uint32_t result_submatrices_by_cols = frame->num_work_groups;
     
