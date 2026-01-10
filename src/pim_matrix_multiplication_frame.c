@@ -757,7 +757,7 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(
     uint32_t result_rows, uint32_t result_cols,
     uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size) {
     #ifndef PIM_MATMUL_DPU_BINARY_PATH
-    #error "PIM_MATMUL_DPU_BINARY_PATH not defined. Define it at compile time via -DPIM_MATMUL_DPU_BINARY_PATH=<path>"
+    #error "PIM_MATMUL_DPU_BINARY_PATH is not defined. Please define it to the path of the DPU binary."
     #endif
     return create_pim_matrix_multiplication_frame_binary(num_dpus, dpu_offset,
                                                   matrix1_rows, matrix1_cols,

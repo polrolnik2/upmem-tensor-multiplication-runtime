@@ -62,11 +62,14 @@ pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame_binary
                                                                         uint32_t result_rows, uint32_t result_cols,
                                                                         uint32_t matrix1_type_size, uint32_t matrix2_type_size, uint32_t result_type_size,
                                                                         const char* dpu_binary_path);
-
+                                                                        
 /**
  * @brief Create a new PIM matrix multiplication frame - a structure for managing
  *        the state and data of a matrix multiplication operation on a PIM architecture.
- * @details This function allocates memory for the frame, initializes how the matrices should be split to optimize the memory utilization. It uses a default DPU binary path.
+ * @details This function allocates memory for the frame, initializes how the matrices should be split to optimize the memory utilization. 
+ * @details It uses a default DPU binary path from the parameter DPU_MATMUL_DPU_BINARY_PATH defined at compile time. This flag is defined when building the project and automatically set by the CMake flow.
+ * @details The preffered way to use this library is through the CMake build system integration, which ensures that the DPU binary path is correctly set.
+ * @details If this flag is not defined or the CMake build system is not used, this function will not be available. In that case, use `create_pim_matrix_multiplication_frame_binary` to explicitly provide the DPU binary path.
  * @param num_dpus Number of DPUs to use.
  * @param dpu_offset Offset for DPU memory.
  * @param matrix1_rows Number of rows in the first matrix.
