@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
-project(pim_matmul C)
+project(pim_matmul C CXX)
 
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 option(BUILD_TESTS "Build host tests" ON)
 option(BUILD_BENCHMARKS "Build benchmarks" ON)
