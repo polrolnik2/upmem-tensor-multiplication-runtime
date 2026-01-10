@@ -2,3 +2,6 @@ bin/
 scratch/
 docs/
 build/ 
+__pycache__/
+*.log
+*.tmp
