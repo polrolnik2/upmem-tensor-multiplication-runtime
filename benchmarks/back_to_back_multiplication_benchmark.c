@@ -154,80 +154,34 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	// Arrays to store timing data
-	double *time_load1 = (double*)malloc(iterations * sizeof(double));
-	double *time_exec1 = (double*)malloc(iterations * sizeof(double));
-	double *time_transfer = (double*)malloc(iterations * sizeof(double));
-	double *time_exec2 = (double*)malloc(iterations * sizeof(double));
-	
-	if (!time_load1 || !time_exec1 || !time_transfer || !time_exec2) {
-		fprintf(stderr, "Failed to allocate timing arrays\n");
-		free(time_load1); free(time_exec1); free(time_transfer); free(time_exec2);
-		pim_matrix_multiplication_frame_free(frame);
-		matrix_free(A1); matrix_free(B1); matrix_free(A2); matrix_free(B2);
-		return 1;
-	}
-
 	printf("Running benchmark (%u iterations)...\n\n", iterations);
 
 	Timer total_timer;
+
+	pim_matrix_multiplication_frame_load_first_matrix(frame, A1);
+	pim_matrix_multiplication_frame_load_second_matrix(frame, B1);
+
 	startTimer(&total_timer);
 
 	for (uint32_t iter = 0; iter < iterations; iter++) {
-		printf("Iteration %u:\n", iter + 1);
-
 		// Phase 1: Load first matrices and execute
 		Timer timer;
-		startTimer(&timer);
-		pim_matrix_multiplication_frame_load_first_matrix(frame, A1);
-		pim_matrix_multiplication_frame_load_second_matrix(frame, B1);
-		stopTimer(&timer);
-		time_load1[iter] = getElapsedTime(timer);
-		printf("  Load matrices 1:        %.3f ms\n", time_load1[iter]);
-
-		startTimer(&timer);
 		pim_matrix_multiplication_frame_execute(frame);
-		stopTimer(&timer);
-		time_exec1[iter] = getElapsedTime(timer);
-		printf("  Execute multiplication 1: %.3f ms\n", time_exec1[iter]);
-
-		// Get first result and prepare for next multiplication
-        startTimer(&timer);
+		pim_matrix_multiplication_frame_load_first_matrix(frame, A2);
+		pim_matrix_multiplication_frame_load_second_matrix(frame, B2);
 		Matrix *result1 = pim_matrix_multiplication_frame_get_result(frame);
-        stopTimer(&timer);
-        printf("  Retrieve result 1:      %.3f ms\n", getElapsedTime(timer));
 		if (!result1) {
 			fprintf(stderr, "Failed to get result from first multiplication\n");
-			free(time_load1); free(time_exec1); free(time_transfer); free(time_exec2);
 			pim_matrix_multiplication_frame_free(frame);
 			matrix_free(A1); matrix_free(B1); matrix_free(A2); matrix_free(B2);
 			return 1;
 		}
-
-		// Phase 2: Load new matrices and retrieve old result (overlapped operation)
-		// This simulates the pipeline: load new data while getting old result
-		startTimer(&timer);
+		pim_matrix_multiplication_frame_execute(frame);
 		pim_matrix_multiplication_frame_load_first_matrix(frame, A2);
 		pim_matrix_multiplication_frame_load_second_matrix(frame, B2);
-		// Implicit: result1 is already retrieved above
-		stopTimer(&timer);
-		time_transfer[iter] = getElapsedTime(timer);
-		printf("  Load matrices 2:        %.3f ms\n", time_transfer[iter]);
-
-		startTimer(&timer);
-		pim_matrix_multiplication_frame_execute(frame);
-		stopTimer(&timer);
-		time_exec2[iter] = getElapsedTime(timer);
-		printf("  Execute multiplication 2: %.3f ms\n", time_exec2[iter]);
-
-		// Get second result
-        startTimer(&timer);
 		Matrix *result2 = pim_matrix_multiplication_frame_get_result(frame);
-        stopTimer(&timer);
-        printf("  Retrieve result 2:      %.3f ms\n", getElapsedTime(timer));
 		if (!result2) {
 			fprintf(stderr, "Failed to get result from second multiplication\n");
-			free(time_load1); free(time_exec1); free(time_transfer); free(time_exec2);
 			pim_matrix_multiplication_frame_free(frame);
 			matrix_free(A1); matrix_free(B1); matrix_free(A2); matrix_free(B2);
 			matrix_free(result1);
@@ -237,8 +191,6 @@ int main(int argc, char **argv) {
 		// Free results
 		matrix_free(result1);
 		matrix_free(result2);
-
-		printf("\n");
 	}
 
 	stopTimer(&total_timer);
@@ -251,36 +203,14 @@ int main(int argc, char **argv) {
 	matrix_free(A2);
 	matrix_free(B2);
 
-	// Calculate statistics
-	double avg_load1 = 0, avg_exec1 = 0, avg_transfer = 0, avg_exec2 = 0;
-	for (uint32_t i = 0; i < iterations; i++) {
-		avg_load1 += time_load1[i];
-		avg_exec1 += time_exec1[i];
-		avg_transfer += time_transfer[i];
-		avg_exec2 += time_exec2[i];
-	}
-	avg_load1 /= iterations;
-	avg_exec1 /= iterations;
-	avg_transfer /= iterations;
-	avg_exec2 /= iterations;
-
-	double total_per_iteration = avg_load1 + avg_exec1 + avg_transfer + avg_exec2;
+	double total_per_iteration = total_time / iterations;
 
 	// Print summary
 	printf("=== Summary ===\n");
 	printf("Total benchmark time:        %.3f ms\n", total_time);
 	printf("Average per iteration:       %.3f ms\n", total_per_iteration);
-	printf("  Average load matrices 1:   %.3f ms (%.1f%%)\n", avg_load1, avg_load1/total_per_iteration*100);
-	printf("  Average execute 1:         %.3f ms (%.1f%%)\n", avg_exec1, avg_exec1/total_per_iteration*100);
-	printf("  Average load matrices 2:   %.3f ms (%.1f%%)\n", avg_transfer, avg_transfer/total_per_iteration*100);
-	printf("  Average execute 2:         %.3f ms (%.1f%%)\n", avg_exec2, avg_exec2/total_per_iteration*100);
 	printf("\n");
 	printf("Multiplications per second:  %.1f\n", (2.0 * iterations) / (total_time / 1000.0));
-
-	free(time_load1);
-	free(time_exec1);
-	free(time_transfer);
-	free(time_exec2);
 
 	return 0;
 }
