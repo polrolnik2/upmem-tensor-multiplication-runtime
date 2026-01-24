@@ -125,6 +125,8 @@ Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_fr
  */
 void pim_matrix_multiplication_frame_free(pim_matrix_multiplication_frame_t* frame);
 
+void pim_matrix_multiplication_frame_sync(pim_matrix_multiplication_frame_t* frame);
+
 #ifdef __cplusplus
 }
 #endif

@@ -325,7 +325,7 @@ void pim_matrix_multiplication_frame_load_first_matrix(pim_matrix_multiplication
     printf("Loading first matrix submatrix size: %u bytes\n", submatrix_size);
     printf("Rows: %u, Cols: %u, Num Row Tiles: %u, Num Col Tiles: %u\n", matrix_rows, matrix_cols, num_row_tiles, num_col_tiles);
     #endif // DEBUG
-    DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, DPU_MRAM_HEAP_POINTER_NAME, offset, submatrix_size, DPU_XFER_DEFAULT));
+    DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, DPU_MRAM_HEAP_POINTER_NAME, offset, submatrix_size, DPU_XFER_ASYNC));
     frame->result_valid = false; // Reset result validity after loading new matrix
 
 cleanup:
@@ -417,7 +417,7 @@ void pim_matrix_multiplication_frame_load_second_matrix(pim_matrix_multiplicatio
     printf("Loading first matrix submatrix size: %u bytes\n", submatrix_size);
     printf("Rows: %u, Cols: %u, Num Row Tiles: %u, Num Col Tiles: %u\n", matrix_rows, matrix_cols, num_row_tiles, num_col_tiles);
     #endif // DEBUG
-    DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, DPU_MRAM_HEAP_POINTER_NAME, offset, submatrix_size, DPU_XFER_DEFAULT));
+    DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, DPU_MRAM_HEAP_POINTER_NAME, offset, submatrix_size, DPU_XFER_ASYNC));
     frame->result_valid = false; // Reset result validity after loading new matrix
 
 cleanup:
@@ -495,7 +495,7 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, "MATRIX_MULTIPLY_ARGUMENTS", 0,
                             sizeof(dpu_pim_matrix_multiply_kernel_arguments_t), DPU_XFER_DEFAULT));
 
-    DPU_ASSERT(dpu_launch(frame->dpu_set, DPU_SYNCHRONOUS));
+    DPU_ASSERT(dpu_launch(frame->dpu_set, DPU_ASYNCHRONOUS));
 
     #ifdef DEBUG
     DPU_FOREACH(frame->dpu_set, dpu) {
@@ -748,6 +748,11 @@ cleanup:
     if (submatrices_row_populated) free(submatrices_row_populated);
     
     return NULL;
+}
+
+void pim_matrix_multiplication_frame_sync(pim_matrix_multiplication_frame_t* frame) {
+    if (!frame) return;
+    DPU_ASSERT(dpu_sync(frame->dpu_set));
 }
 
 pim_matrix_multiplication_frame_t* create_pim_matrix_multiplication_frame(
