@@ -13,11 +13,10 @@ Matrix*  dpu_multiply_matrices(Matrix* matrix1, Matrix* matrix2, uint32_t num_dp
         return NULL;
     }
     pim_matrix_multiplication_frame_load_first_matrix(frame, matrix1);
-    pim_matrix_multiplication_frame_sync(frame);
     pim_matrix_multiplication_frame_load_second_matrix(frame, matrix2);
-    pim_matrix_multiplication_frame_sync(frame);
     #ifdef TIMER
     startTimer(&time);
+    pim_matrix_multiplication_frame_sync(frame);
     #endif
     pim_matrix_multiplication_frame_execute(frame);
     pim_matrix_multiplication_frame_sync(frame);
@@ -26,7 +25,6 @@ Matrix*  dpu_multiply_matrices(Matrix* matrix1, Matrix* matrix2, uint32_t num_dp
     printf("DPU multiplication time: %.3f ms\n", getElapsedTime(time));
     #endif  
     Matrix* result = pim_matrix_multiplication_frame_get_result(frame);
-    pim_matrix_multiplication_frame_sync(frame);
     if (!result) {
         fprintf(stderr, "Result retrieval failed");
         return NULL;
