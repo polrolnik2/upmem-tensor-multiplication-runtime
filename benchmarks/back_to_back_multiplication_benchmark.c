@@ -88,13 +88,6 @@ int main(int argc, char **argv) {
 			return 0;
 		}
 	}
-
-	printf("Back-to-back Multiplication Benchmark\n");
-	printf("  DPUs: %u\n", num_dpus);
-	printf("  Iterations: %u\n\n", iterations);
-
-	// Load all matrices
-	printf("Loading matrices...\n");
 	Matrix *A1 = read_text_matrix_to_matrix(pathA1);
 	if (!A1) {
 		fprintf(stderr, "Failed to read matrix A1 from %s\n", pathA1);
@@ -136,10 +129,6 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	printf("Matrix dimensions:\n");
-	printf("  A1: %ux%u, B1: %ux%u -> Result1: %ux%u\n", A1->rows, A1->cols, B1->rows, B1->cols, A1->rows, B1->cols);
-	printf("  A2: %ux%u, B2: %ux%u -> Result2: %ux%u\n\n", A2->rows, A2->cols, B2->rows, B2->cols, A2->rows, B2->cols);
-
 	// Create multiplication frame
 	pim_matrix_multiplication_frame_t* frame = create_pim_matrix_multiplication_frame(
 		num_dpus, 0, 
@@ -153,8 +142,6 @@ int main(int argc, char **argv) {
 		matrix_free(A1); matrix_free(B1); matrix_free(A2); matrix_free(B2);
 		return 1;
 	}
-
-	printf("Running benchmark (%u iterations)...\n\n", iterations);
 
 	Timer total_timer;
 
@@ -205,12 +192,8 @@ int main(int argc, char **argv) {
 
 	double total_per_iteration = total_time / iterations;
 
-	// Print summary
-	printf("=== Summary ===\n");
 	printf("Total benchmark time:        %.3f ms\n", total_time);
 	printf("Average per iteration:       %.3f ms\n", total_per_iteration);
-	printf("\n");
-	printf("Multiplications per second:  %.1f\n", (2.0 * iterations) / (total_time / 1000.0));
 
 	return 0;
 }
