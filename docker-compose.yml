@@ -15,8 +15,8 @@ services:
     working_dir: /workspace
     environment:
       - PIM_MATMUL_BENCHMARKS_ROOT=/workspace
-      - PKG_CONFIG_PATH=/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig
-      - LD_LIBRARY_PATH=/opt/upmem-2023.2.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
+      - PKG_CONFIG_PATH=/opt/upmem-2025.1.0-Linux-x86_64/share/pkgconfig
+      - LD_LIBRARY_PATH=/opt/upmem-2025.1.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
     command: /bin/bash
     stdin_open: true
     tty: true
@@ -36,11 +36,11 @@ services:
     working_dir: /workspace
     environment:
       - PIM_MATMUL_BENCHMARKS_ROOT=/workspace
-      - PKG_CONFIG_PATH=/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig
-      - LD_LIBRARY_PATH=/opt/upmem-2023.2.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
+      - PKG_CONFIG_PATH=/opt/upmem-2025.1.0-Linux-x86_64/share/pkgconfig
+      - LD_LIBRARY_PATH=/opt/upmem-2025.1.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
     command: >
       /bin/bash -c "
-      source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator &&
+      source /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator &&
       source /workspace/source.me &&
       mkdir -p /workspace/build/ &&
       cmake -S /workspace/ -B /workspace/build/ &&
@@ -62,11 +62,11 @@ services:
     working_dir: /workspace
     environment:
       - PIM_MATMUL_BENCHMARKS_ROOT=/workspace
-      - PKG_CONFIG_PATH=/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig
-      - LD_LIBRARY_PATH=/opt/upmem-2023.2.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
+      - PKG_CONFIG_PATH=/opt/upmem-2025.1.0-Linux-x86_64/share/pkgconfig
+      - LD_LIBRARY_PATH=/opt/upmem-2025.1.0-Linux-x86_64/lib:/usr/lib/x86_64-linux-gnu
     command: >
       /bin/bash -c "
-      source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator &&
+      source /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator &&
       source /workspace/source.me &&
       mkdir -p /workspace/build/ &&
       cmake -S /workspace/ -B /workspace/build/ &&

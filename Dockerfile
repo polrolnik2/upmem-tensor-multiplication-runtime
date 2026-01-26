@@ -28,17 +28,17 @@ COPY lib/upmem.tar.gz /tmp/upmem.tar.gz
 RUN tar -xzf /tmp/upmem.tar.gz -C /opt/ && rm /tmp/upmem.tar.gz
 
 # Set environment variables for UPMEM SDK
-ENV PKG_CONFIG_PATH="/opt/upmem-2023.2.0-Linux-x86_64/share/pkgconfig"
-ENV PATH="/opt/upmem-2023.2.0-Linux-x86_64/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/upmem-2023.2.0-Linux-x86_64/lib"
-ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/opt/upmem-2023.2.0-Linux-x86_64/lib"
+ENV PKG_CONFIG_PATH="/opt/upmem-2025.1.0-Linux-x86_64/share/pkgconfig"
+ENV PATH="/opt/upmem-2025.1.0-Linux-x86_64/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/upmem-2025.1.0-Linux-x86_64/lib"
+ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/opt/upmem-2025.1.0-Linux-x86_64/lib"
 ENV PIM_MATMUL_BENCHMARKS_ROOT="/workspace"
 
 RUN cat >> /etc/bash.bashrc <<'BASH'
 # Source UPMEM SDK in simulator mode if available
-if [ -f /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh ]; then
+if [ -f /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh ]; then
     # shellcheck disable=SC1091
-    source /opt/upmem-2023.2.0-Linux-x86_64/upmem_env.sh simulator
+    source /opt/upmem-2025.1.0-Linux-x86_64/upmem_env.sh simulator
 fi
 
 # Source project environment if present
