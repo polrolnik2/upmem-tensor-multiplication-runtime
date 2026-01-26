@@ -25,6 +25,10 @@ typedef struct {
     uint32_t matrix1_original_cols;
     uint32_t matrix2_original_rows;
     uint32_t matrix2_original_cols;
+    uint32_t inline_load_offset;
+    uint32_t inline_load_size;
+    uint32_t inline_retrieve_offset;
+    uint32_t inline_retrieve_size;
 } dpu_pim_matrix_multiply_kernel_arguments_t;
 
 #endif // __DPU_PIM_MATRIX_MULTIPLY_KERNEL_ARGUMENTS_H___

@@ -473,6 +473,11 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     input_args.matrix2_original_rows = frame->matrix2_rows;
     input_args.matrix2_original_cols = matrix2_split_cols;
 
+    input_args.inline_load_offset = 0;
+    input_args.inline_load_size = 0;  
+    input_args.inline_retrieve_offset = 0;
+    input_args.inline_retrieve_size = 0;  
+
     #ifdef DEBUG
     printf("Executing PIM matrix multiplication with parameters:\n");
     printf("Matrix1 Start Offset: %u, Matrix2 Start Offset: %u, Result Start Offset: %u\n",

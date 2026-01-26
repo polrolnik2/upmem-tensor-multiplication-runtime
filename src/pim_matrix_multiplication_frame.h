@@ -111,6 +111,51 @@ void pim_matrix_multiplication_frame_load_second_matrix(pim_matrix_multiplicatio
 void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* frame);
 
 /**
+    * @brief Execute the matrix multiplication on the PIM architecture with inline data transfers.
+    * @details This function allows loading matrices and retrieving results in a single call, optimizing data transfers.
+    * @param execution_frame Pointer to the PIM matrix multiplication frame for execution.
+    * @param transfer_frame Pointer to the PIM matrix multiplication frame for data transfers.
+    * @param load_matrices Flag indicating whether to load the matrices.
+    * @param first_matrix Pointer to the first matrix (if loading).
+    * @param second_matrix Pointer to the second matrix (if loading).
+    * @param retrieve_result Flag indicating whether to retrieve the result matrix.
+    * @param result_matrix Pointer to store the resulting matrix (if retrieving).
+*/
+void pim_matrix_multiplication_frame_execute_and_transfer_inline(pim_matrix_multiplication_frame_t* execution_frame, pim_matrix_multiplication_frame_t* transfer_frame, bool load_matrices, Matrix * first_matrix, Matrix * second_matrix, bool retrieve_result, Matrix ** result_matrix);
+
+/**
+    * @brief Macro to execute matrix multiplication with loading and retrieving in one call.
+    * @param execution_frame Pointer to the PIM matrix multiplication frame for execution.
+    * @param transfer_frame Pointer to the PIM matrix multiplication frame for data transfers.
+    * @param first_matrix Pointer to the first matrix to load.
+    * @param second_matrix Pointer to the second matrix to load.
+    * @param result_matrix Pointer to store the resulting matrix.
+*/
+#define pim_matrix_multiplication_frame_execute_load_retrieve(execution_frame, transfer_frame, first_matrix, second_matrix, result_matrix) \
+    pim_matrix_multiplication_frame_execute_and_transfer_inline(execution_frame, transfer_frame, true, first_matrix, second_matrix, true, result_matrix)
+
+/**
+    * @brief Macro to execute matrix multiplication with loading only.
+    * @param execution_frame Pointer to the PIM matrix multiplication frame for execution.
+    * @param transfer_frame Pointer to the PIM matrix multiplication frame for data transfers.
+    * @param first_matrix Pointer to the first matrix to load.
+    * @param second_matrix Pointer to the second matrix to load. 
+
+*/
+#define pim_matrix_multiplication_frame_execute_load(execution_frame, transfer_frame, first_matrix, second_matrix) \
+    pim_matrix_multiplication_frame_execute_and_transfer_inline(execution_frame, transfer_frame, true, first_matrix, second_matrix, false, NULL)
+
+/**
+    * @brief Macro to execute matrix multiplication with retrieving only.
+    * @param execution_frame Pointer to the PIM matrix multiplication frame for execution.
+    * @param transfer_frame Pointer to the PIM matrix multiplication frame for data transfers.
+    * @param result_matrix Pointer to store the resulting matrix.
+
+*/
+#define pim_matrix_multiplication_frame_execute_retrieve(execution_frame, transfer_frame, result_matrix) \
+    pim_matrix_multiplication_frame_execute_and_transfer_inline(execution_frame, transfer_frame, false, NULL, NULL, true, result_matrix)
+
+/**
  * @brief Get the result of the matrix multiplication from the frame.
  * @details This function retrieves the result matrix after execution. The result is only valid after calling `pim_matrix_multiplication_frame_execute`. The valid flag resets when a new matrix is loaded.
  *          The result is a matrix containing the product of the two matrices loaded into the frame.
@@ -125,6 +170,10 @@ Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_fr
  */
 void pim_matrix_multiplication_frame_free(pim_matrix_multiplication_frame_t* frame);
 
+/**
+ * @brief Synchronize the frame, ensuring all operations are complete.
+ * @param frame Pointer to the PIM matrix multiplication frame.
+ */
 void pim_matrix_multiplication_frame_sync(pim_matrix_multiplication_frame_t* frame);
 
 #ifdef __cplusplus

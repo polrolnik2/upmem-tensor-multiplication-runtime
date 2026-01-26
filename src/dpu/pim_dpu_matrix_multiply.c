@@ -9,6 +9,7 @@
 #include <mutex.h>
 #include <handshake.h>
 #include <sem.h>
+#include <wramfifo.h>
 
 #include "dpu_pim_matrix_multiply_kernel_arguments.h"
 
@@ -55,6 +56,21 @@ MUTEX_INIT(status_mutex);
 BARRIER_INIT(main_barrier, NR_TASKLETS);
 
 BARRIER_INIT(compute_barrier, NR_TASKLETS-1);
+
+#define input_fifo __input_fifo__
+__host uint8_t* __get_fifo_data_name(input_fifo);                                
+__dma_aligned uint8_t* __get_fifo_tmp_data_name(input_fifo);      
+uint32_t input_fifo_element_size;                                                   
+__host struct dpu_input_fifo_t * input_fifo;
+
+#define output_fifo __output_fifo__
+__host uint8_t* __get_fifo_data_name(output_fifo);                              
+__dma_aligned uint8_t* __get_fifo_tmp_data_name(output_fifo);  
+uint32_t output_fifo_element_size;                                 
+__host struct dpu_output_fifo_t * output_fifo;
+
+uint32_t inline_input_current_offset = 0;
+uint32_t inline_output_current_offset = 0;
 
 static inline void load_A_tile_from_mram(__mram_ptr void *src, __dma_aligned void *dst, uint32_t bytes) {
     for (uint32_t offset = 0; offset < bytes; offset += 2048) {
@@ -275,6 +291,27 @@ bool dma_tasklet(uint32_t next_i, uint32_t next_j, uint32_t next_k,
         printf("[DPU %d] Completed writing result tile C(%d, %d) to MRAM\n", me(), result_i[output_buffer_index], result_j[output_buffer_index]);
         #endif
     } 
+    if (MATRIX_MULTIPLY_ARGUMENTS.inline_load_size > 0) {
+        uint8_t * inline_load_data = input_fifo_peek(input_fifo);
+        uint32_t load_size = inline_input_current_offset - MATRIX_MULTIPLY_ARGUMENTS.inline_load_size < input_fifo_element_size ?
+                             MATRIX_MULTIPLY_ARGUMENTS.inline_load_size - inline_input_current_offset :
+                             input_fifo_element_size;
+        mram_write(inline_load_data, 
+                    (__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.inline_load_offset + DPU_MRAM_HEAP_POINTER + inline_input_current_offset), 
+                    load_size);
+        inline_input_current_offset += load_size;
+        input_fifo_pop(input_fifo);
+    }
+    if (MATRIX_MULTIPLY_ARGUMENTS.inline_retrieve_size > 0) {
+        uint32_t retrieve_size = inline_output_current_offset - MATRIX_MULTIPLY_ARGUMENTS.inline_retrieve_size < output_fifo_element_size ?
+                                 MATRIX_MULTIPLY_ARGUMENTS.inline_retrieve_size - inline_output_current_offset :
+                                 output_fifo_element_size;
+        uint8_t * inline_output_data = (uint8_t*)mem_alloc(retrieve_size);
+        mram_read((__mram_ptr void *)(MATRIX_MULTIPLY_ARGUMENTS.inline_retrieve_offset + DPU_MRAM_HEAP_POINTER + inline_output_current_offset),
+                   inline_output_data, retrieve_size);
+        inline_output_current_offset += retrieve_size;
+        output_fifo_push(output_fifo, inline_output_data);
+    }
     return loaded_next;
 }
 
@@ -356,6 +393,45 @@ int main() {
         #endif
         
         result_elements = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
+        
+        uint32_t input_fifo_ptr_size = 3;
+        uint32_t input_transfer_bytes = (matrix1_tiles_rowwise * matrix1_tiles_colwise +
+                                        matrix2_tiles_rowwise * matrix2_tiles_colwise) * matrix1_tile_size_bytes;
+        uint32_t input_transfer_tiles = (matrix1_tiles_rowwise * matrix1_tiles_colwise * matrix2_tiles_colwise);
+        uint32_t input_bytes_per_tile = input_transfer_bytes / input_transfer_tiles + ((input_transfer_bytes % input_transfer_tiles) ? 1 : 0);
+        input_bytes_per_tile += (input_bytes_per_tile % 8) ? (8 - (input_bytes_per_tile % 8)) : 0; // Align to 8 bytes
+        input_fifo_element_size = input_bytes_per_tile;
+        __get_fifo_data_name(input_fifo) = (__host uint8_t*)mem_alloc((1 << input_fifo_ptr_size) * input_fifo_element_size);
+        if (!__get_fifo_data_name(input_fifo)) {
+            printf("[DPU %d] ERROR: Failed to allocate memory for input FIFO\n", pid);
+            return -2; 
+        }
+        __get_fifo_tmp_data_name(input_fifo) = (__dma_aligned uint8_t*)mem_alloc(NR_TASKLETS * input_fifo_element_size);
+        if (!__get_fifo_tmp_data_name(input_fifo)) {
+            printf("[DPU %d] ERROR: Failed to allocate memory for input FIFO tmp buffer\n", pid);
+            return -2; 
+        }
+        struct dpu_input_fifo_t input_tmp = { 0, 0, __get_fifo_data_name(input_fifo), __get_fifo_tmp_data_name(input_fifo), input_fifo_ptr_size, input_fifo_element_size };
+        input_fifo = (struct dpu_input_fifo_t*)&input_tmp;
+        
+        uint32_t OUTPUT_FIFO_PTR_SIZE = 3;
+        uint32_t output_transfer_bytes = result_tiles_rowwise * result_tiles_colwise * result_tile_size_bytes;
+        uint32_t output_transfer_tiles = result_tiles_rowwise * result_tiles_colwise * matrix1_tiles_colwise;
+        uint32_t output_bytes_per_tile = output_transfer_bytes / output_transfer_tiles + ((output_transfer_bytes % output_transfer_tiles) ? 1 : 0);
+        output_bytes_per_tile += (output_bytes_per_tile % 8) ? (8 - (output_bytes_per_tile % 8)) : 0; // Align to 8
+        output_fifo_element_size = output_bytes_per_tile;
+        __get_fifo_data_name(output_fifo) = (__host uint8_t*)mem_alloc((1 << OUTPUT_FIFO_PTR_SIZE) * output_fifo_element_size);
+        if (!__get_fifo_data_name(output_fifo)) {
+            printf("[DPU %d] ERROR: Failed to allocate memory for output FIFO\n", pid);
+            return -2;
+        }
+        __get_fifo_tmp_data_name(output_fifo) = (__dma_aligned uint8_t*)mem_alloc(NR_TASKLETS * output_fifo_element_size);
+        if (!__get_fifo_tmp_data_name(output_fifo)) {
+            printf("[DPU %d] ERROR: Failed to allocate memory for output FIFO tmp buffer\n", pid);
+            return -2;
+        }
+        struct dpu_output_fifo_t output_tmp = { 0, 0, __get_fifo_data_name(output_fifo), __get_fifo_tmp_data_name(output_fifo), OUTPUT_FIFO_PTR_SIZE, output_fifo_element_size };
+        output_fifo = (struct dpu_output_fifo_t*)&output_tmp;
     }
 
     barrier_wait(&main_barrier);
