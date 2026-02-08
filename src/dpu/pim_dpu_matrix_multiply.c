@@ -394,7 +394,7 @@ int main() {
         
         result_elements = MATRIX_MULTIPLY_ARGUMENTS.result_tile_rows * MATRIX_MULTIPLY_ARGUMENTS.result_tile_cols;
         
-        uint32_t input_fifo_ptr_size = 3;
+        uint32_t input_fifo_ptr_size = 1;
         uint32_t input_transfer_bytes = (matrix1_tiles_rowwise * matrix1_tiles_colwise +
                                         matrix2_tiles_rowwise * matrix2_tiles_colwise) * matrix1_tile_size_bytes;
         uint32_t input_transfer_tiles = (matrix1_tiles_rowwise * matrix1_tiles_colwise * matrix2_tiles_colwise);
@@ -406,7 +406,7 @@ int main() {
             printf("[DPU %d] ERROR: Failed to allocate memory for input FIFO\n", pid);
             return -2; 
         }
-        __get_fifo_tmp_data_name(input_fifo) = (__dma_aligned uint8_t*)mem_alloc(NR_TASKLETS * input_fifo_element_size);
+        __get_fifo_tmp_data_name(input_fifo) = (__dma_aligned uint8_t*)mem_alloc(input_fifo_element_size);
         if (!__get_fifo_tmp_data_name(input_fifo)) {
             printf("[DPU %d] ERROR: Failed to allocate memory for input FIFO tmp buffer\n", pid);
             return -2; 
@@ -414,7 +414,7 @@ int main() {
         struct dpu_input_fifo_t input_tmp = { 0, 0, __get_fifo_data_name(input_fifo), __get_fifo_tmp_data_name(input_fifo), input_fifo_ptr_size, input_fifo_element_size };
         input_fifo = (struct dpu_input_fifo_t*)&input_tmp;
         
-        uint32_t OUTPUT_FIFO_PTR_SIZE = 3;
+        uint32_t OUTPUT_FIFO_PTR_SIZE = 1;
         uint32_t output_transfer_bytes = result_tiles_rowwise * result_tiles_colwise * result_tile_size_bytes;
         uint32_t output_transfer_tiles = result_tiles_rowwise * result_tiles_colwise * matrix1_tiles_colwise;
         uint32_t output_bytes_per_tile = output_transfer_bytes / output_transfer_tiles + ((output_transfer_bytes % output_transfer_tiles) ? 1 : 0);
@@ -425,7 +425,7 @@ int main() {
             printf("[DPU %d] ERROR: Failed to allocate memory for output FIFO\n", pid);
             return -2;
         }
-        __get_fifo_tmp_data_name(output_fifo) = (__dma_aligned uint8_t*)mem_alloc(NR_TASKLETS * output_fifo_element_size);
+        __get_fifo_tmp_data_name(output_fifo) = (__dma_aligned uint8_t*)mem_alloc(output_fifo_element_size);
         if (!__get_fifo_tmp_data_name(output_fifo)) {
             printf("[DPU %d] ERROR: Failed to allocate memory for output FIFO tmp buffer\n", pid);
             return -2;

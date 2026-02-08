@@ -512,6 +512,436 @@ void pim_matrix_multiplication_frame_execute(pim_matrix_multiplication_frame_t* 
     return;
 }
 
+void pim_matrix_multiplication_frame_execute_and_transfer_inline(pim_matrix_multiplication_frame_t* execution_frame, pim_matrix_multiplication_frame_t* transfer_frame, bool load_matrices, Matrix * first_matrix, Matrix * second_matrix, bool retrieve_result, Matrix ** result_matrix) {
+    dpu_pim_matrix_multiply_kernel_arguments_t input_args;
+    struct dpu_set_t dpu;
+    input_args.matrix1_start_offset = execution_frame->matrix1_start_offset;
+    input_args.matrix2_start_offset = execution_frame->matrix2_start_offset;
+    input_args.result_start_offset = execution_frame->result_start_offset;
+    
+    // Calculate matrix1 dimensions aligned to tile sizes
+    uint32_t matrix1_rows_wg_aligned = align_rows_to_work_group(execution_frame->result_rows, execution_frame->work_group_size);
+    uint32_t matrix1_split_rows = matrix1_rows_wg_aligned / execution_frame->work_group_size;
+    uint32_t matrix1_rows_8byte_aligned = align_rows_to_8bytes(matrix1_split_rows, execution_frame->result_type_size);
+    input_args.matrix1_rows = align_dim_to_tile(matrix1_rows_8byte_aligned, execution_frame->matrix1_tile_rows);
+    
+    uint32_t matrix1_cols_8byte_aligned = align_cols_to_8bytes(execution_frame->matrix1_cols, execution_frame->matrix1_type_size);
+    input_args.matrix1_cols = align_dim_to_tile(matrix1_cols_8byte_aligned, execution_frame->matrix1_tile_cols);
+    
+    // Calculate matrix2 dimensions aligned to tile sizes
+    uint32_t matrix2_rows_8byte_aligned = align_rows_to_8bytes(execution_frame->matrix2_rows, execution_frame->matrix2_type_size);
+    input_args.matrix2_rows = align_dim_to_tile(matrix2_rows_8byte_aligned, execution_frame->matrix2_tile_rows);
+    
+    uint32_t matrix2_cols_wg_aligned = align_cols_to_work_group(execution_frame->matrix2_cols, execution_frame->num_work_groups);
+    uint32_t matrix2_split_cols = matrix2_cols_wg_aligned / execution_frame->num_work_groups;
+    uint32_t matrix2_cols_8byte_aligned = align_cols_to_8bytes(matrix2_split_cols, execution_frame->result_type_size);
+    input_args.matrix2_cols = align_dim_to_tile(matrix2_cols_8byte_aligned, execution_frame->matrix2_tile_cols);
+    
+    // Result dimensions should match the aligned matrix dimensions
+    input_args.result_rows = input_args.matrix1_rows;
+    input_args.result_cols = input_args.matrix2_cols;
+    input_args.matrix1_type_size = execution_frame->matrix1_type_size;
+    input_args.matrix2_type_size = execution_frame->matrix2_type_size;
+    input_args.result_type_size = execution_frame->result_type_size;
+    
+    // Use pre-calculated tile dimensions from the frame
+    input_args.wram_input_tile_size = execution_frame->wram_input_tile_size;
+    input_args.matrix1_tile_rows = execution_frame->matrix1_tile_rows;
+    input_args.matrix1_tile_cols = execution_frame->matrix1_tile_cols;
+    input_args.matrix2_tile_rows = execution_frame->matrix2_tile_rows;
+    input_args.matrix2_tile_cols = execution_frame->matrix2_tile_cols;
+    input_args.result_tile_rows = execution_frame->result_tile_rows;
+    input_args.result_tile_cols = execution_frame->result_tile_cols;
+    
+    input_args.matrix1_original_rows = matrix1_split_rows;
+    input_args.matrix1_original_cols = execution_frame->matrix1_cols;
+    input_args.matrix2_original_rows = execution_frame->matrix2_rows;
+    input_args.matrix2_original_cols = matrix2_split_cols;
+
+    input_args.inline_load_offset = transfer_frame->matrix1_start_offset; // Assuming both matrices are loaded contiguously starting from matrix1 offset
+    input_args.inline_load_size = (transfer_frame->matrix1_start_offset - transfer_frame->matrix2_start_offset) + (transfer_frame->matrix2_start_offset - transfer_frame->result_start_offset); // Size covering both matrices
+    input_args.inline_retrieve_offset = transfer_frame->result_start_offset;
+    input_args.inline_retrieve_size = transfer_frame->mem_frame_end - transfer_frame->result_start_offset; // Size from result start to end of frame
+
+    #ifdef DEBUG
+    printf("Executing PIM matrix multiplication with parameters:\n");
+    printf("Matrix1 Start Offset: %u, Matrix2 Start Offset: %u, Result Start Offset: %u\n",
+           input_args.matrix1_start_offset, input_args.matrix2_start_offset, input_args.result_start_offset);
+    printf("Matrix1 Rows: %u, Matrix1 Cols: %u\n", input_args.matrix1_rows, input_args.matrix1_cols);
+    printf("Matrix2 Rows: %u, Matrix2 Cols: %u\n", input_args.matrix2_rows, input_args.matrix2_cols);
+    printf("Result Rows: %u, Result Cols: %u\n", input_args.result_rows, input_args.result_cols);
+    printf("Matrix1 Type Size: %u, Matrix2 Type Size: %u, Result Type Size: %u\n",
+           input_args.matrix1_type_size, input_args.matrix2_type_size, input_args.result_type_size);
+    printf("Matrix1 Tile: %ux%u, Matrix2 Tile: %ux%u, Result Tile: %ux%u\n",
+           input_args.matrix1_tile_rows, input_args.matrix1_tile_cols,
+           input_args.matrix2_tile_rows, input_args.matrix2_tile_cols,
+           input_args.result_tile_rows, input_args.result_tile_cols);
+    #endif // DEBUG
+
+    struct dpu_fifo_link_t input_link, output_link;
+    DPU_ASSERT(dpu_link_input_fifo(dpu_set, &input_link, "__input_fifo__"));
+    DPU_ASSERT(dpu_link_output_fifo(dpu_set, &output_link, "__output_fifo__"));
+    
+    void ***retrieve_submatrices_data = NULL;
+    void **load_matrix1_submatrices_data = NULL;
+    void **load_matrix2_submatrices_data = NULL;
+    
+    // If retrieving result, prepare host buffers for receiving tiled output data from DPUs
+    if (retrieve_result) {
+        bool *submatrices_row_populated = NULL;
+        uint32_t result_rows_wg_aligned = align_rows_to_work_group(frame->result_rows, frame->work_group_size);
+        uint32_t result_cols_wg_aligned = align_cols_to_work_group(frame->matrix2_cols, frame->num_work_groups);
+        uint32_t result_rows_frame_aligned = result_rows_wg_aligned / frame->work_group_size;
+        uint32_t result_cols_frame_aligned = result_cols_wg_aligned / frame->num_work_groups;
+        
+        // First apply 8-byte alignment padding
+        uint32_t result_rows_8byte_aligned = align_rows_to_8bytes(result_rows_frame_aligned, frame->matrix1_type_size);
+        uint32_t result_cols_8byte_aligned = align_cols_to_8bytes(result_cols_frame_aligned, frame->matrix2_type_size);
+        
+        // Then ensure dimensions are multiples of tile dimensions for proper tiling
+        uint32_t result_rows_dpu_transfer_aligned = align_dim_to_tile(result_rows_8byte_aligned, frame->result_tile_rows);
+        uint32_t result_cols_dpu_transfer_aligned = align_dim_to_tile(result_cols_8byte_aligned, frame->result_tile_cols);
+        
+        // Calculate tiled data size for result transfer
+        uint32_t result_num_row_tiles, result_num_col_tiles;
+        compute_tile_counts(result_rows_dpu_transfer_aligned, result_cols_dpu_transfer_aligned,
+                            frame->result_tile_rows, frame->result_tile_cols,
+                            &result_num_row_tiles, &result_num_col_tiles);
+        uint32_t result_size_aligned = tiled_buffer_size_bytes(result_num_row_tiles, result_num_col_tiles,
+                                                            frame->result_tile_rows, frame->result_tile_cols,
+                                                            frame->result_type_size);
+        uint32_t result_submatrices_by_rows = frame->work_group_size;
+        uint32_t result_submatrices_by_cols = frame->num_work_groups;
+        
+        retrieve_submatrices_data = (void***)malloc(result_submatrices_by_rows * sizeof(void**));
+        if (!retrieve_submatrices_data) {
+            fprintf(stderr, "Failed to allocate memory for submatrices data\n");
+            goto cleanup;
+        }
+        
+        submatrices_row_populated = (bool*)malloc(result_submatrices_by_rows * sizeof(bool));
+        if (!submatrices_row_populated) {
+            fprintf(stderr, "Failed to allocate memory for submatrices row populated flags\n");
+            goto cleanup;
+        }
+        
+        for (uint32_t i = 0; i < result_submatrices_by_rows; i++) {
+            submatrices_row_populated[i] = false;
+            retrieve_submatrices_data[i] = NULL;
+        }
+        
+        uint32_t i;
+        struct dpu_set_t dpu;
+        DPU_FOREACH(frame->dpu_set, dpu, i) {
+            uint32_t row = i % result_submatrices_by_rows;
+            uint32_t col = i / result_submatrices_by_rows;
+            
+            if (!submatrices_row_populated[row]) {
+                retrieve_submatrices_data[row] = malloc(result_submatrices_by_cols * sizeof(void*));
+                if (!retrieve_submatrices_data[row]) {
+                    fprintf(stderr, "Failed to allocate memory for submatrix data row\n");
+                    goto cleanup;
+                }
+                for (uint32_t j = 0; j < result_submatrices_by_cols; j++) {
+                    retrieve_submatrices_data[row][j] = NULL;
+                }
+                submatrices_row_populated[row] = true;
+            }
+            
+            retrieve_submatrices_data[row][col] = malloc(result_size_aligned);
+            if (!retrieve_submatrices_data[row][col]) {
+                fprintf(stderr, "Failed to allocate memory for submatrix data element\n");
+                goto cleanup;
+            }
+            DPU_ASSERT(dpu_fifo_prepare_xfer(dpu, &output_link, retrieve_submatrices_data[row][col]));
+        }
+        free(submatrices_row_populated);
+    }
+
+    if (load_matrices) {
+        if (!transfer_frame || !first_matrix) return;
+        Matrix *matrix_split_aligned = NULL;
+        Matrix **submatrices = NULL;
+        bool *submatrices_data_populated = NULL;
+        // Load first matrix into MRAM at the specified offset
+        uint32_t matrix1_rows_wg_aligned = align_rows_to_work_group(transfer_frame->matrix1_rows, transfer_frame->work_group_size);
+        uint32_t aligned_rows = matrix1_rows_wg_aligned - transfer_frame->matrix1_rows;
+        matrix_split_aligned = matrix_add_rows(first_matrix, aligned_rows, NULL);
+        if (!matrix_split_aligned) {
+            fprintf(stderr, "Failed to align matrix rows for PIM transfer_frame\n");
+            goto cleanup;
+        }
+        submatrices = matrix_split_by_rows(matrix_split_aligned, transfer_frame->work_group_size);
+        if (!submatrices) {
+            fprintf(stderr, "Failed to split matrix by rows for PIM transfer_frame\n");
+            goto cleanup;
+        }
+        
+        load_matrix1_submatrices_data = (void**)malloc(transfer_frame->work_group_size * sizeof(void*));
+        if (!load_matrix1_submatrices_data) {
+            fprintf(stderr, "Failed to allocate memory for submatrices data\n");
+            goto cleanup;
+        }
+        
+        submatrices_data_populated = (bool*)malloc(transfer_frame->work_group_size * sizeof(bool));
+        if (!submatrices_data_populated) {
+            fprintf(stderr, "Failed to allocate memory for submatrices data populated flags\n");
+            goto cleanup;
+        }
+        
+        for (uint32_t i = 0; i < transfer_frame->work_group_size; i++) {
+            submatrices_data_populated[i] = false;
+        }
+        
+        // Load the aligned matrix into MRAM
+        uint32_t i;
+        struct dpu_set_t dpu;
+        DPU_FOREACH(transfer_frame->dpu_set, dpu, i) {
+            if (!submatrices_data_populated[i % transfer_frame->work_group_size]) {
+                submatrices[i % transfer_frame->work_group_size] = matrix_align(submatrices[i % transfer_frame->work_group_size]);
+                if (!submatrices[i % transfer_frame->work_group_size]) {
+                    fprintf(stderr, "Failed to align submatrix for PIM transfer_frame\n");
+                    goto cleanup;
+                }
+                load_matrix1_submatrices_data[i % transfer_frame->work_group_size] = matrix_get_data_4d_row_major_tiled(submatrices[i % transfer_frame->work_group_size], transfer_frame->matrix1_tile_rows, transfer_frame->matrix1_tile_cols);
+                if (!load_matrix1_submatrices_data[i % transfer_frame->work_group_size]) {
+                    fprintf(stderr, "Failed to get 4D tiled data from submatrix\n");
+                    goto cleanup;
+                }
+                submatrices_data_populated[i % transfer_frame->work_group_size] = true;
+            }
+            DPU_ASSERT(dpu_prepare_xfer(dpu, load_matrix1_submatrices_data[i % transfer_frame->work_group_size]));
+        }
+        free(submatrices_data_populated);
+        free(submatrices);
+        matrix_free(matrix_split_aligned);
+    }
+
+    if (load_matrices) {
+        if (!transfer_frame || !second_matrix) return;
+        Matrix *matrix_split_aligned = NULL;
+        Matrix **submatrices = NULL;
+        bool *submatrices_data_populated = NULL;
+        
+        // Load second matrix into MRAM at the specified offset
+        uint32_t matrix2_cols_wg_aligned = align_cols_to_work_group(transfer_frame->matrix2_cols, transfer_frame->num_work_groups);
+        uint32_t aligned_cols = matrix2_cols_wg_aligned - transfer_frame->matrix2_cols;
+        matrix_split_aligned = matrix_add_cols(second_matrix, aligned_cols, NULL);
+        if (!matrix_split_aligned) {
+            fprintf(stderr, "Failed to align matrix cols for PIM transfer_frame\n");
+            goto cleanup;
+        }
+        
+        submatrices = matrix_split_by_cols(matrix_split_aligned, transfer_frame->num_work_groups);
+        if (!submatrices) {
+            fprintf(stderr, "Failed to split matrix by cols for PIM transfer_frame\n");
+            goto cleanup;
+        }
+        
+        load_matrix2_submatrices_data = (void**)malloc(transfer_frame->num_work_groups * sizeof(void*));
+        if (!load_matrix2_submatrices_data) {
+            fprintf(stderr, "Failed to allocate memory for submatrices data\n");
+            goto cleanup;
+        }
+        
+        submatrices_data_populated = (bool*)malloc(transfer_frame->num_work_groups * sizeof(bool));
+        if (!submatrices_data_populated) {
+            fprintf(stderr, "Failed to allocate memory for submatrices data populated flags\n");
+            goto cleanup;
+        }
+        
+        for (uint32_t i = 0; i < transfer_frame->num_work_groups; i++) {
+            submatrices_data_populated[i] = false;
+        }
+        
+        // Load the aligned matrix into MRAM
+        uint32_t i;
+        struct dpu_set_t dpu;
+        DPU_FOREACH(transfer_frame->dpu_set, dpu, i) {
+            if (!submatrices_data_populated[i / transfer_frame->work_group_size]) {
+                submatrices[i / transfer_frame->work_group_size] = matrix_align(submatrices[i / transfer_frame->work_group_size]);
+                if (!submatrices[i / transfer_frame->work_group_size]) {
+                    fprintf(stderr, "Failed to align submatrix for PIM transfer_frame\n");
+                    goto cleanup;
+                }
+                // For matrix2, we need column-major data in tiled format
+                // First transpose the matrix, then get tiled data, which gives us column-major tiled format
+                Matrix* transposed = matrix_transpose(submatrices[i / transfer_frame->work_group_size]);
+                if (!transposed) {
+                    fprintf(stderr, "Failed to transpose submatrix for PIM transfer_frame\n");
+                    goto cleanup;
+                }
+                load_matrix2_submatrices_data[i / transfer_frame->work_group_size] = matrix_get_data_4d_row_major_tiled(transposed, transfer_frame->matrix2_tile_cols, transfer_frame->matrix2_tile_rows);
+                matrix_free(transposed);
+                if (!load_matrix2_submatrices_data[i / transfer_frame->work_group_size]) {
+                    fprintf(stderr, "Failed to get 4D tiled data from transposed submatrix\n");
+                    goto cleanup;
+                }
+                submatrices_data_populated[i / transfer_frame->work_group_size] = true;
+            }
+            DPU_ASSERT(dpu_prepare_xfer(dpu, load_matrix2_submatrices_data[i / transfer_frame->work_group_size]));
+        }
+        free(submatrices_data_populated);
+        free(submatrices);
+        matrix_free(matrix_split_aligned);
+    }
+
+    DPU_FOREACH(frame->dpu_set, dpu) {
+        DPU_ASSERT(dpu_prepare_xfer(dpu, &input_args));
+    }
+
+    DPU_ASSERT(dpu_push_xfer(frame->dpu_set, DPU_XFER_TO_DPU, "MATRIX_MULTIPLY_ARGUMENTS", 0,
+                            sizeof(dpu_pim_matrix_multiply_kernel_arguments_t), DPU_XFER_DEFAULT));
+
+    DPU_ASSERT(dpu_launch(frame->dpu_set, DPU_ASYNCHRONOUS));
+
+    uint32_t total_tiles_in_execution = (input_args.matrix1_rows / input_args.matrix1_tile_rows) * (input_args.matrix1_cols / input_args.matrix1_tile_cols) +
+                                     (input_args.matrix2_rows / input_args.matrix2_tile_rows) * (input_args.matrix2_cols / input_args.matrix2_tile_cols);
+
+    for (uint32_t i = 0; i < total_tiles_in_execution; i++) {
+        // Wait for a tile to be loaded if load_matrices is true
+        if (load_matrices) {
+            DPU_ASSERT(dpu_fifo_push_xfer(&input_link, &loaded_tile_data, UINT32_MAX));
+        }
+        if (retrieve_result) {
+            DPU_ASSERT(dpu_fifo_push_xfer(&output_link, &retrieved_tile_data, UINT32_MAX));
+        }
+    }
+    
+    dpu_sync(dpu_set);
+
+    DPU_ASSERT(dpu_fifo_push_xfer(dpu_set, &output_link, DPU_XFER_DEFAULT));
+
+    Matrix ***submatrices = NULL;
+    Matrix **row_submatrices = NULL;
+    Matrix *result = NULL;
+
+    submatrices = (Matrix***)malloc(result_submatrices_by_rows * sizeof(Matrix**));
+    if (!submatrices) {
+        fprintf(stderr, "Failed to allocate memory for submatrices\n");
+        goto cleanup;
+    }
+    
+    row_submatrices = (Matrix**)malloc(result_submatrices_by_rows * sizeof(Matrix*));
+    if (!row_submatrices) {
+        fprintf(stderr, "Failed to allocate memory for row submatrices\n");
+        goto cleanup;
+    }
+    
+    for (uint32_t i = 0; i < result_submatrices_by_rows; i++) {
+        submatrices[i] = NULL;
+        row_submatrices[i] = NULL;
+    }
+    
+    for (uint32_t i = 0; i < result_submatrices_by_rows; i++) {
+        submatrices[i] = (Matrix**)malloc(result_submatrices_by_cols * sizeof(Matrix*));
+        if (!submatrices[i]) {
+            fprintf(stderr, "Failed to allocate memory for submatrix row %u\n", i);
+            goto cleanup;
+        }
+        
+        for (uint32_t j = 0; j < result_submatrices_by_cols; j++) {
+            submatrices[i][j] = NULL;
+        }
+        
+        for (uint32_t j = 0; j < result_submatrices_by_cols; j++) {
+            // Use the pre-calculated tile counts
+            submatrices[i][j] = matrix_create_from_4d_row_major_tiled_array(
+                result_num_row_tiles, result_num_col_tiles,
+                frame->result_tile_rows, frame->result_tile_cols,
+                submatrices_data[i][j], frame->result_type_size);
+            if (!submatrices[i][j]) {
+                fprintf(stderr, "Failed to create submatrix from row major array\n");
+                goto cleanup;
+            }
+            
+            Matrix *extracted = matrix_extract_submatrix(submatrices[i][j], result_rows_frame_aligned, result_cols_frame_aligned);
+            if (!extracted) {
+                fprintf(stderr, "Failed to extract submatrix\n");
+                goto cleanup;
+            }
+            matrix_free(submatrices[i][j]);
+            submatrices[i][j] = extracted;
+            #ifdef DEBUG
+            printf("Retrieved submatrix (%u, %u):\n", i, j);
+            matrix_print(submatrices[i][j], "| %d |");
+            #endif // DEBUG
+        }
+        
+        row_submatrices[i] = matrix_join_by_cols(submatrices[i], result_submatrices_by_cols);
+        if (!row_submatrices[i]) {
+            fprintf(stderr, "Failed to join submatrices by columns\n");
+            goto cleanup;
+        }
+    }
+    
+    result = matrix_join_by_rows(row_submatrices, result_submatrices_by_rows);
+    if (!result) {
+        fprintf(stderr, "Failed to join submatrices by rows\n");
+        goto cleanup;
+    }
+    
+    Matrix *final_result = matrix_extract_submatrix(result, frame->result_rows, frame->result_cols);
+    if (!final_result) {
+        fprintf(stderr, "Failed to extract final result submatrix\n");
+        goto cleanup;
+    }
+    
+    matrix_free(result);
+    result = final_result;
+    
+    // Clean up intermediate allocations but keep the result
+    if (submatrices) {
+        for (uint32_t i = 0; i < result_submatrices_by_rows; i++) {
+            if (submatrices[i]) {
+                for (uint32_t j = 0; j < result_submatrices_by_cols; j++) {
+                    if (submatrices[i][j]) {
+                        matrix_free(submatrices[i][j]);
+                    }
+                }
+                free(submatrices[i]);
+            }
+        }
+        free(submatrices);
+    }
+    
+    if (row_submatrices) {
+        for (uint32_t i = 0; i < result_submatrices_by_rows; i++) {
+            if (row_submatrices[i]) {
+                matrix_free(row_submatrices[i]);
+            }
+        }
+        free(row_submatrices);
+    }
+    
+    if (submatrices_data) {
+        for (uint32_t i = 0; i < result_submatrices_by_rows; i++) {
+            if (submatrices_row_populated && submatrices_row_populated[i] && submatrices_data[i]) {
+                for (uint32_t j = 0; j < result_submatrices_by_cols; j++) {
+                    if (submatrices_data[i][j]) {
+                        free(submatrices_data[i][j]);
+                    }
+                }
+                free(submatrices_data[i]);
+            }
+        }
+        free(submatrices_data);
+    }
+    
+    if (submatrices_row_populated) free(submatrices_row_populated);
+    
+    *result_matrix = *result;
+
+    #ifdef DEBUG
+    DPU_FOREACH(frame->dpu_set, dpu) {
+        DPU_ASSERT(dpu_log_read(dpu, stdout));
+    }
+    #endif // DEBUG
+
+    frame->result_valid = true; // Mark result as valid after execution
+    return;
+}
+
 Matrix * pim_matrix_multiplication_frame_get_result(pim_matrix_multiplication_frame_t* frame) {
     if (!frame) {
         fprintf(stderr, "Frame is NULL\n");
