@@ -1,3 +1,6 @@
+![License](https://img.shields.io/badge/license-MIT-red)
+![Static Badge](https://img.shields.io/badge/Docker-Supported-blue)
+
 # PIM Matrix Multiplication Benchmarks
 
 This project implements a framework for multiplying matrices using UPMEM PIM - a commercially available processing-in-memory solution. It provides all necessary primitives to execute and control the process of matrix multiplication on this device, including patterns for distributing matrices, executing operations, and gathering results.
