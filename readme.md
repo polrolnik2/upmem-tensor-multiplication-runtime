@@ -3,7 +3,19 @@
 
 # PIM Matrix Multiplication Benchmarks
 
-This project implements a framework for multiplying matrices using UPMEM PIM - a commercially available processing-in-memory solution. It provides all necessary primitives to execute and control the process of matrix multiplication on this device, including patterns for distributing matrices, executing operations, and gathering results.
+This project provides a reference implementation of matrix multiplication using Processing-In-Memory (PIM) capabilities of UPMEM DPUs. To that end it implements a matrix Tiling Schema and a host program to orchestrate the distributed computation across DPUs. 
+
+The project also includes a set of benchmarks and unit tests to validate the implementation, a CMake-based build system for easy compilation and integration, and a Docker Compose setup for consistent development and testing environments. One of the goals for the project is to be easily integrated into other CMake-based projects, so the library is designed to be modular and reusable.
+
+Possible application domains for this project include deep learning, scientific computing, and any other domain that relies heavily on matrix operations. By leveraging the computational capabilities of DPUs, this project aims to provide significant performance improvements for matrix multiplication tasks, which are fundamental to many applications in these domains.
+
+It could be used to serve as a backend for higher-level libraries or frameworks such as TensorFlow or PyTorch that require efficient matrix multiplication, or as a standalone library for applications that need to perform large-scale matrix operations.
+
+It is important to note that this project is a reference implementation and may not be optimized for all use cases. Future work could include further optimizations, support for additional matrix operations, and integration with other libraries and frameworks.
+
+While the raw performance of this implementation does not match the performance of highly optimized GPU-based libraries, it serves as a starting point for exploring the potential of PIM for matrix multiplication and provides a foundation for future optimizations and improvements. This project focuses on demonstrating the scaling potential of PIM for matrix multiplication, and the performance results should be interpreted in that context. The goal is to show how performance can improve as we scale up the number of DPUs, rather than achieving the highest possible performance on a single DPU or a small number of DPUs.
+
+It can be used as a reference for researchers and developers interested in exploring the potential of PIM for matrix multiplication, and as a starting point for further optimizations and improvements in this area. 
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
