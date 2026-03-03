@@ -284,3 +284,22 @@ Matrix* matrixB = matrix_create_from_row_major_array(...);
 ## License
 
 See [LICENSE](LICENSE) for details.
+
+## Roadmap
+
+## Acknowledgements
+
+- [Accelerating LLMs using an Efficient GEMM Libraryand Target-Aware Optimizations on Real-World PIMDevices](https://dl.acm.org/doi/epdf/10.1145/3696443.3708953)
+
+- [Processing Multi-Layer Perceptrons In-Memory](https://ieeexplore.ieee.org/document/10768222)
+
+- [A Full-System Perspective on UPMEM Performance](https://dl.acm.org/doi/epdf/10.1145/3609308.3625266)
+
+- [Benchmarking a New Paradigm: An Experimental Analysis of a Real Processing-in-Memory Architecture](https://arxiv.org/abs/2105.03814)
+
+- [SimplePIM: A Software Framework for Productive and Efficient Processing-in-Memory](https://arxiv.org/abs/2310.01893)
+
+- [Tesseract: Parallelize the Tensor Parallelism Efficiently](https://arxiv.org/abs/2105.14500#:~:text=To%20solve%20these%20problems%2C%20we%20propose%20Tesseract%2C%20a,and%20lowers%20the%20memory%20required%20for%20each%20GPU.)
+
+- [Megatron-LM: Training Multi-Billion Parameter Language Models Using
+Model Parallelism](https://arxiv.org/pdf/1909.08053)
