@@ -287,6 +287,13 @@ See [LICENSE](LICENSE) for details.
 
 ## Roadmap
 
+Optimising **Sustained Performance** - the performance achieved when considering the entire end-to-end execution time, including data transfers and setup overheads. This is crucial for real-world applications where the total time to solution matters more than just the raw computation speed.
+- Creating an optimized DPU kernel and host routines that parallelize the computation with data transfers between host and DPUs, overlapping communication and computation to minimize idle time.
+- As some of the previous works outline - the performance of PIM-based solutions can be significantly impacted by the overhead of data transfers between the host and DPUs. To address this, we will explore techniques to overlap communication and computation, such as using asynchronous data transfers and double buffering, to ensure that the DPUs are kept busy while data is being transferred.
+- This will hopefuly lead to a more accurate representation of the performance benefits of PIM for matrix multiplication in real-world scenarios, where the total execution time is a critical factor and lay the groundwork for further optimizations and improvements in the future.
+
+Application Specific optimizations - tailoring the matrix multiplication implementation to specific application domains, such as deep learning or scientific computing, where certain patterns of matrix operations are common. This could involve optimizing for specific matrix sizes, sparsity patterns, or data types that are prevalent in these applications.
+
 ## Acknowledgements
 
 - [Accelerating LLMs using an Efficient GEMM Libraryand Target-Aware Optimizations on Real-World PIMDevices](https://dl.acm.org/doi/epdf/10.1145/3696443.3708953)
