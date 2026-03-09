@@ -108,17 +108,17 @@ This guarantees that distributed block computations produce the same complete re
 
 ```mermaid
 flowchart TB
-      A[Host App / Benchmarks\nMatrix creation, experiment loops, timing] --> B[Frame Orchestrator\ncreate_pim_matrix_multiplication_frame]
-      B --> C[Partition + Align + Tile\nrow/col split, padding, transpose matrix2]
-      C --> D[Host↔DPU ABI\nMATRIX_MULTIPLY_ARGUMENTS]
-      D --> E[DPU MRAM Transfers\ndpu_prepare_xfer + dpu_push_xfer]
-      E --> F[DPU Kernel\nTile GEMM, tasklet parallelism]
-      F --> G[DMA/Compute Coordination\nbarrier + semaphore + ping-pong buffers]
+      A[Host App / Benchmarks<br>Matrix creation, experiment loops, timing] --> B[Frame Orchestrator<br>create_pim_matrix_multiplication_frame]
+      B --> C[Partition + Align + Tile<br>row/col split, padding, transpose matrix2]
+      C --> D[Host↔DPU ABI<br>MATRIX_MULTIPLY_ARGUMENTS]
+      D --> E[DPU MRAM Transfers<br>dpu_prepare_xfer + dpu_push_xfer]
+      E --> F[DPU Kernel<br>Tile GEMM, tasklet parallelism]
+      F --> G[DMA/Compute Coordination<br>barrier + semaphore + ping-pong buffers]
       G --> H[Result Tiles in MRAM]
-      H --> I[Host Retrieval + Reassembly\njoin tiles, extract original shape]
+      H --> I[Host Retrieval + Reassembly<br>join tiles, extract original shape]
       I --> J[Output Matrix + Metrics]
 
-      K[(Research Guidance\nTarget-aware GEMM\nMLP In-Memory\nSystem-level PIM analysis)] -. informs .-> B
+      K[(Research Guidance<br>Target-aware GEMM<br>MLP In-Memory<br>System-level PIM analysis)] -. informs .-> B
       K -. informs .-> C
       K -. informs .-> G
 ```
