@@ -18,6 +18,7 @@ While the raw performance of this implementation does not match the performance 
 It can be used as a reference for researchers and developers interested in exploring the potential of PIM for matrix multiplication, and as a starting point for further optimizations and improvements in this area. 
 
 ## Table of Contents
+- [Architecture Overview](#architecture-overview)
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
   - [Git LFS Setup](#git-lfs-setup)
@@ -25,6 +26,120 @@ It can be used as a reference for researchers and developers interested in explo
   - [Building with CMake Directly](#building-with-cmake-directly)
 - [Integration Guide](#integration-guide)
 - [Documentation](#documentation)
+- [Roadmap](#roadmap)
+- [Acknowledgements](#acknowledgements)
+
+## Architecture Overview
+
+This project is designed as a **host-orchestrated PIM compute pipeline** for GEMM-style workloads.  
+It combines explicit host-side scheduling with DPU-local tiled compute so teams can benchmark scaling, prototype optimizations quickly, and integrate into larger ML/HPC stacks with minimal friction.
+
+### Value Proposition
+
+- **Composable Integration**: clean C API and CMake integration for drop-in use in existing systems.
+- **Scalable Decomposition**: matrix partitioning across DPU work groups and tasklets.
+- **Dataflow-Aware Layout**: host-side tiling and matrix transformations aligned to DPU memory behavior.
+- **Performance Engineering Ready**: explicit separation of transfer, launch, and retrieval phases for measurement and tuning.
+- **Research-to-Product Bridge**: architecture matches optimization themes from the cited PIM literature (target-aware layout, overlap of communication and compute, sustained throughput focus).
+
+### Layered Architecture
+
+1. **Host Application Layer**
+    - Benchmarks/tests and external applications construct matrices and invoke the PIM API.
+    - Responsible for experiment orchestration, iteration loops, and timing breakdowns.
+
+2. **Host Runtime & Orchestration Layer**
+    - `pim_matrix_multiplication_frame_t` stores execution metadata: DPU set, offsets, tile geometry, data types, and validity state.
+    - Computes padding/alignment and memory frame layout per DPU.
+    - Splits input matrices into DPU-targeted submatrices, converts to tiled format, and schedules transfers.
+
+3. **Host↔DPU Contract Layer**
+    - `dpu_pim_matrix_multiply_kernel_arguments_t` defines the binary ABI between host and kernel.
+    - Encodes MRAM offsets, aligned dimensions, original dimensions, tile sizes, and type sizes.
+    - Enables a single kernel implementation to handle multiple matrix shapes safely.
+
+4. **DPU Kernel Execution Layer**
+    - Tile-based GEMM kernel with tasklet specialization:
+       - tasklet 0 for DMA/load-store orchestration,
+       - remaining tasklets for compute.
+    - Uses barriers, semaphores, and ping-pong buffers to coordinate transfer and compute phases.
+
+5. **Result Assembly Layer**
+    - Host retrieves tiled per-DPU outputs, reconstructs global matrix via row/column joins, then crops to original dimensions.
+
+### How Data Is Split Across Multiple DPUs
+
+For an input multiplication $C = A \times B$ where:
+
+- $A \in \mathbb{Z}^{M \times K}$
+- $B \in \mathbb{Z}^{K \times N}$
+- $C \in \mathbb{Z}^{M \times N}$
+
+the host maps DPUs as a 2D logical grid:
+
+- **row partitions** = `work_group_size`
+- **column partitions** = `num_work_groups`
+- **total DPUs** = `work_group_size * num_work_groups`
+
+Each DPU is responsible for one output block $C_{r,c}$ and receives:
+
+- one **row-slice of A**: approximately $\frac{M}{\text{work\_group\_size}} \times K$
+- one **column-slice of B**: approximately $K \times \frac{N}{\text{num\_work\_groups}}$
+
+So instead of multiplying full-size matrices on every device, each DPU multiplies a much smaller pair of submatrices. In practice, dimensions are padded/aligned (work-group split, 8-byte alignment, then tile alignment), but the effective compute region still corresponds to that reduced block shape.
+
+#### Why this reduces per-device workload
+
+- Per-DPU output footprint drops from $M \times N$ to roughly:
+   $$\frac{M}{\text{work\_group\_size}} \times \frac{N}{\text{num\_work\_groups}}$$
+- Per-DPU input footprint also shrinks by distributing rows of $A$ and columns of $B$.
+- The inner $K$ accumulation remains local inside each DPU for correctness of each output block.
+
+#### How the full result is reconstructed
+
+1. Host fetches each DPU's partial result block from MRAM.
+2. Blocks in the same row partition are **joined by columns**.
+3. The resulting row-strips are **joined by rows**.
+4. Final matrix is cropped back to the original $(M \times N)$ shape (removing alignment padding).
+
+This guarantees that distributed block computations produce the same complete result as a monolithic multiplication, while reducing memory and compute pressure on each individual DPU. Furthermore it doesn't require any inter-DPU communication since each DPU computes an independent output block, making it a good fit for the UPMEM architecture.
+
+### Architecture Diagram
+
+```mermaid
+flowchart TB
+      A[Host App / Benchmarks\nMatrix creation, experiment loops, timing] --> B[Frame Orchestrator\ncreate_pim_matrix_multiplication_frame]
+      B --> C[Partition + Align + Tile\nrow/col split, padding, transpose matrix2]
+      C --> D[Host↔DPU ABI\nMATRIX_MULTIPLY_ARGUMENTS]
+      D --> E[DPU MRAM Transfers\ndpu_prepare_xfer + dpu_push_xfer]
+      E --> F[DPU Kernel\nTile GEMM, tasklet parallelism]
+      F --> G[DMA/Compute Coordination\nbarrier + semaphore + ping-pong buffers]
+      G --> H[Result Tiles in MRAM]
+      H --> I[Host Retrieval + Reassembly\njoin tiles, extract original shape]
+      I --> J[Output Matrix + Metrics]
+
+      K[(Research Guidance\nTarget-aware GEMM\nMLP In-Memory\nSystem-level PIM analysis)] -. informs .-> B
+      K -. informs .-> C
+      K -. informs .-> G
+```
+
+### Core Data Structures and Why They Matter
+
+- **`Matrix`**
+   - Generic host-side matrix abstraction with split/join/transpose/tile conversion helpers.
+   - Enables clean preprocessing and postprocessing without leaking DPU details to application code.
+
+- **`pim_matrix_multiplication_frame_t`**
+   - Captures the full execution plan (work-group topology, tile geometry, MRAM layout, data widths).
+   - Keeps repeated runs efficient by reusing orchestration metadata.
+
+- **`dpu_pim_matrix_multiply_kernel_arguments_t`**
+   - Stable, explicit ABI for safe kernel launches.
+   - Preserves correctness on boundary tiles by carrying both aligned and original dimensions.
+
+- **Kernel-local WRAM ping-pong buffers (`matrix1_wram[2]`, `matrix2_wram[2]`, `result_wram[2]`)**
+   - Fundamental building block for overlapping data movement and compute.
+   - Reduces idle cycles and supports sustained throughput as problem size and DPU count grow.
 
 ## Prerequisites
 
@@ -305,7 +420,8 @@ See [LICENSE](LICENSE) for details.
 Optimising **Sustained Performance** - the performance achieved when considering the entire end-to-end execution time, including data transfers and setup overheads. This is crucial for real-world applications where the total time to solution matters more than just the raw computation speed.
 - Creating an optimized DPU kernel and host routines that parallelize the computation with data transfers between host and DPUs, overlapping communication and computation to minimize idle time.
 - As some of the previous works outline - the performance of PIM-based solutions can be significantly impacted by the overhead of data transfers between the host and DPUs. To address this, we will explore techniques to overlap communication and computation, such as using asynchronous data transfers and double buffering, to ensure that the DPUs are kept busy while data is being transferred.
-- This will hopefuly lead to a more accurate representation of the performance benefits of PIM for matrix multiplication in real-world scenarios, where the total execution time is a critical factor and lay the groundwork for further optimizations and improvements in the future.
+- This will hopefully lead to a more accurate representation of the performance benefits of PIM for matrix multiplication in real-world scenarios, where the total execution time is a critical factor and lay the groundwork for further optimizations and improvements in the future.
+Tests show the scaling of this metric on the current implementation is not ideal, and we will explore various techniques to improve it.
 
 Application Specific optimizations - tailoring the matrix multiplication implementation to specific application domains, such as deep learning or scientific computing, where certain patterns of matrix operations are common. This could involve optimizing for specific matrix sizes, sparsity patterns, or data types that are prevalent in these applications.
 
