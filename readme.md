@@ -34,14 +34,6 @@ It can be used as a reference for researchers and developers interested in explo
 This project is designed as a **host-orchestrated PIM compute pipeline** for GEMM-style workloads.  
 It combines explicit host-side scheduling with DPU-local tiled compute so teams can benchmark scaling, prototype optimizations quickly, and integrate into larger ML/HPC stacks with minimal friction.
 
-### Value Proposition
-
-- **Composable Integration**: clean C API and CMake integration for drop-in use in existing systems.
-- **Scalable Decomposition**: matrix partitioning across DPU work groups and tasklets.
-- **Dataflow-Aware Layout**: host-side tiling and matrix transformations aligned to DPU memory behavior.
-- **Performance Engineering Ready**: explicit separation of transfer, launch, and retrieval phases for measurement and tuning.
-- **Research-to-Product Bridge**: architecture matches optimization themes from the cited PIM literature (target-aware layout, overlap of communication and compute, sustained throughput focus).
-
 ### Layered Architecture
 
 1. **Host Application Layer**
