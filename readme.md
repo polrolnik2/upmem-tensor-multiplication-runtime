@@ -133,6 +133,16 @@ flowchart TB
    - Fundamental building block for overlapping data movement and compute.
    - Reduces idle cycles and supports sustained throughput as problem size and DPU count grow.
 
+### Performance
+
+For a single run of the kernel without accounting for data transfer and setup overheads we achieved the following performance scaling as we increased the number of DPUs:
+
+![Performance Scaling](examples/dpu-scaling.png)
+
+For comparison we tried measuring scaling on an NVIDIA A100 GPU by changing the numbers of SMs used for computation using the same benchmark and achieved the following performance scaling:
+
+![GPU Performance Scaling](examples/A100-scaling.png)
+
 ## Prerequisites
 
 - **Git LFS**: Required for downloading the UPMEM SDK tarball
