@@ -83,15 +83,15 @@ the host maps DPUs as a 2D logical grid:
 
 Each DPU is responsible for one output block $C_{r,c}$ and receives:
 
-- one **row-slice of A**: approximately $\frac{M}{\text{work\_group\_size}} \times K$
-- one **column-slice of B**: approximately $K \times \frac{N}{\text{num\_work\_groups}}$
+- one **row-slice of A**: approximately $\frac{M}{\text{work group size}} \times K$
+- one **column-slice of B**: approximately $K \times \frac{N}{\text{num work groups}}$
 
 So instead of multiplying full-size matrices on every device, each DPU multiplies a much smaller pair of submatrices. In practice, dimensions are padded/aligned (work-group split, 8-byte alignment, then tile alignment), but the effective compute region still corresponds to that reduced block shape.
 
 #### Why this reduces per-device workload
 
 - Per-DPU output footprint drops from $M \times N$ to roughly:
-   $$\frac{M}{\text{work\_group\_size}} \times \frac{N}{\text{num\_work\_groups}}$$
+   $$\frac{M}{\text{work group size}} \times \frac{N}{\text{num work groups}}$$
 - Per-DPU input footprint also shrinks by distributing rows of $A$ and columns of $B$.
 - The inner $K$ accumulation remains local inside each DPU for correctness of each output block.
 
